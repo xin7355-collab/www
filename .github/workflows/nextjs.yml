@@ -27,8 +27,12 @@ jobs:
           node-version: '20'
           cache: npm
 
+      # enablement: true 讓 workflow 自己開啟 Pages 並設成 GitHub Actions 來源，
+      # 不必先到 Settings > Pages 手動設定
       - name: Setup Pages
         uses: actions/configure-pages@v5
+        with:
+          enablement: true
 
       - name: Install dependencies
         run: npm ci
