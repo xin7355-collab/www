@@ -2,7 +2,7 @@
 
 只給自己用的片庫首頁。把作品、進度、評分、觀看連結收在一起，點一下就開播。
 
-**技術組成**：Next.js static export（GitHub Pages）＋ Google Apps Script ＋ Google Sheets。
+**技術組成**：Next.js static export（Cloudflare Pages）＋ Google Apps Script ＋ Google Sheets。
 沒有自建伺服器，沒有月費。
 
 ---
@@ -59,18 +59,42 @@ cp .env.example .env.local     # 填入上一步的網址
 npm run dev                    # http://localhost:3000
 ```
 
-### 第三步：部署到 GitHub Pages
+### 第三步：部署到 Cloudflare Pages
 
-1. Repo **Settings > Secrets and variables > Actions > New repository secret**
-   - Name：`NEXT_PUBLIC_APPS_SCRIPT_URL`
-   - Value：第一步的網址
-2. Repo **Settings > Pages > Build and deployment > Source** 選 **GitHub Actions**
-3. Push 到 `main`，Actions 跑完即上線
+用 Cloudflare 而不是 GitHub Pages，理由有兩個：**私有 repo 也能免費部署**，以及可以用
+Cloudflare Access 把整個站鎖成「只有我的 Google 帳號能登入」—— GitHub Pages 做不到這件事
+（即使 repo 是 private，產出的網站仍然是公開的）。
 
-網址會是 `https://<你的帳號>.github.io/www/`。
-如果 repo 不叫 `www`，記得同步改 `next.config.js` 的 `repoName` 與 `src/app/manifest.ts` 的 `base`。
+1. 到 [dash.cloudflare.com](https://dash.cloudflare.com) 註冊（免費方案就夠）
+2. 左側 **Workers & Pages > Create > Pages > Connect to Git**，授權 GitHub 後選這個 repo
+3. 建置設定：
 
-### 第四步：第一次使用
+   | 欄位 | 值 |
+   |---|---|
+   | Framework preset | `Next.js (Static HTML Export)` |
+   | Build command | `npm run build` |
+   | Build output directory | `out` |
+
+4. 展開 **Environment variables**，新增：
+   - `NEXT_PUBLIC_APPS_SCRIPT_URL` = 第一步的網址
+
+   （Node 版本由 repo 根目錄的 `.nvmrc` 決定，不必另外設 `NODE_VERSION`）
+5. **Save and Deploy**。之後每次 push 到 `main` 都會自動重新部署
+
+網址會是 `https://<專案名>.pages.dev`。
+
+### 第四步（重要）：把站鎖起來
+
+到這一步為止，任何知道網址的人都能打開你的片庫。要真正做到「只有自己看」：
+
+1. Cloudflare 儀表板 **Zero Trust > Access > Applications > Add an application > Self-hosted**
+2. Application domain 填你的 `*.pages.dev` 網址
+3. Policy：Action 選 **Allow**，Include 選 **Emails** 並填你自己的 email
+4. 儲存後，任何人打開網址都會先看到 Cloudflare 的登入頁，只有你的 email 收到的驗證碼能進去
+
+免費方案含 50 個使用者，個人用綽綽有餘。
+
+### 第五步：第一次使用
 
 首頁輸入任意名稱 → 點「以此名稱建立新帳號」，系統會在試算表新增對應分頁。
 
@@ -124,8 +148,9 @@ npm run lint    # ESLint —— 本專案唯一的自動化檢查
 
 ## 已知限制
 
-- **不託管影片**：GitHub Pages 是靜態站，沒有儲存空間也沒有轉檔能力。想放自己的影片檔要改成自架方案（Docker + 資料庫 + ffmpeg）
+- **不託管影片**：靜態站沒有儲存空間也沒有轉檔能力。想放自己的影片檔要改成自架方案（Docker + 資料庫 + ffmpeg）
 - **iframe 內嵌只對允許內嵌的站有效**：YouTube、BiliBili 可以；多數影音站會用 `X-Frame-Options` 擋掉，所以那些一律走新分頁開啟
 - **設定存在 localStorage**：站點網域與播放進度是 per-browser 的，換裝置要重設
-- **Apps Script URL 會被打包進 bundle**：靜態站沒有伺服器端可藏密鑰（見上方警告）
+- **Apps Script URL 會被打包進 bundle**：靜態站沒有伺服器端可藏密鑰（見上方警告）。
+  第四步的 Cloudflare Access 是這一點的實質防線 —— 沒登入的人連 bundle 都下載不到
 - **沒有測試框架**：`npm run lint` 是唯一的自動化檢查

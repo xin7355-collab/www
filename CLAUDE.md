@@ -14,8 +14,15 @@ npm run lint    # ESLint（flat config）
 
 ## 部署
 
-- Push 到 `main` 觸發 `.github/workflows/nextjs.yml`，static export 後發到 GitHub Pages
-- CI 注入 Secret：`NEXT_PUBLIC_APPS_SCRIPT_URL`；本機開發放在 `.env.local`
+- **部署由 Cloudflare Pages 直接接 Git 完成**，不經過 GitHub Actions。
+  push 到 `main` 後 Cloudflare 自己拉程式碼、跑 `npm run build`、發佈 `out/`
+- `.github/workflows/ci.yml` **只做 lint + build 把關，不做部署**
+- 環境變數 `NEXT_PUBLIC_APPS_SCRIPT_URL` 設在 Cloudflare Pages 專案的 Environment variables；
+  本機開發放 `.env.local`
+- Node 版本由 `.nvmrc` 決定（Cloudflare Pages 預設的 Node 太舊，跑不動 Next 16）
+- 站台前面掛 Cloudflare Access，只有指定 email 能進 —— 這是「只有自己看」的實質防線
+- 曾經評估過 GitHub Pages 但走不通：**私有 repo 在免費方案無法啟用 Pages**，
+  `configure-pages` 會以 `Resource not accessible by integration` 失敗
 - 改完 `apps-script-code.gs` 後，**必須手動到 GAS 後台重新部署**（部署 > 管理部署 > 編輯 > 版本：全新版本），否則不生效
 
 ## 整體架構
@@ -57,7 +64,8 @@ Browser (Next.js static export)  ──►  Google Apps Script  ──►  Googl
 
 ### 靜態輸出限制
 
-- `next.config.js`：`output: 'export'`、production `basePath: '/www'`、`images.unoptimized`
+- `next.config.js`：`output: 'export'`、`images.unoptimized`。
+  **沒有 `basePath`** —— Cloudflare Pages 站台在網域根目錄，加了反而會壞
 - 因此**不可使用**任何 server-only 功能（執行期 Route Handlers、`revalidate`、`force-dynamic`）
 - `manifest.ts` 必須保留 `export const dynamic = 'force-static'`
 - 所有金鑰一律走 `NEXT_PUBLIC_` 打包進 bundle，沒有伺服器端可藏（設計取捨，非 bug）

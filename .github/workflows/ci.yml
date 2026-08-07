@@ -1,0 +1,37 @@
+# 部署由 Cloudflare Pages 直接接 Git 完成（見 README）。
+# 這裡只負責把關程式碼品質，不做部署。
+name: CI
+
+on:
+  push:
+    branches: ['main']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+        env:
+          # CI 只驗證建置能過，不需要真的後端網址
+          NEXT_PUBLIC_APPS_SCRIPT_URL: ''
