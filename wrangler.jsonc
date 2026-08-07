@@ -1,0 +1,18 @@
+/**
+ * Cloudflare 部署設定。
+ *
+ * 只有走 Workers（Workers Builds / `wrangler deploy`）那條路時才會用到 ——
+ * 純靜態站沒有 `main` 進入點，整個 Worker 就是一包靜態資源。
+ * 若走 Cloudflare Pages 流程，設定在儀表板上填，這個檔案會被忽略。
+ */
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "www",
+  "compatibility_date": "2026-08-01",
+  "assets": {
+    // next build 的 static export 產出目錄
+    "directory": "./out",
+    // out/404.html 是 Next 產生的 not-found 頁
+    "not_found_handling": "404-page"
+  }
+}

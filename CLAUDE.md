@@ -14,10 +14,12 @@ npm run lint    # ESLint（flat config）
 
 ## 部署
 
-- **部署由 Cloudflare Pages 直接接 Git 完成**，不經過 GitHub Actions。
+- **部署由 Cloudflare 直接接 Git 完成**，不經過 GitHub Actions。
   push 到 `main` 後 Cloudflare 自己拉程式碼、跑 `npm run build`、發佈 `out/`
+- Cloudflare 有 Pages 與 Workers 兩條路，repo 同時支援：Pages 的建置設定填在儀表板；
+  Workers 走 `wrangler.jsonc`（純靜態，沒有 `main`，整包就是 `assets.directory: ./out`）
 - `.github/workflows/ci.yml` **只做 lint + build 把關，不做部署**
-- 環境變數 `NEXT_PUBLIC_APPS_SCRIPT_URL` 設在 Cloudflare Pages 專案的 Environment variables；
+- 環境變數 `NEXT_PUBLIC_APPS_SCRIPT_URL` 設在 Cloudflare 專案的建置變數；
   本機開發放 `.env.local`
 - Node 版本由 `.nvmrc` 決定（Cloudflare Pages 預設的 Node 太舊，跑不動 Next 16）
 - 站台前面掛 Cloudflare Access，只有指定 email 能進 —— 這是「只有自己看」的實質防線

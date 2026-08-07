@@ -65,8 +65,13 @@ npm run dev                    # http://localhost:3000
 Cloudflare Access 把整個站鎖成「只有我的 Google 帳號能登入」—— GitHub Pages 做不到這件事
 （即使 repo 是 private，產出的網站仍然是公開的）。
 
+Cloudflare 目前有 **Pages** 和 **Workers** 兩條路，儀表板會依版本把你導向其中一條。
+兩條都能用，repo 已經同時備好。**建議優先走 Pages**，因為它有現成的 Access 開關（見第四步）。
+
+#### 路線 A：Pages（建議）
+
 1. 到 [dash.cloudflare.com](https://dash.cloudflare.com) 註冊（免費方案就夠）
-2. 左側 **Workers & Pages > Create > Pages > Connect to Git**，授權 GitHub 後選這個 repo
+2. **Workers & Pages > Create**，選 **Pages** 分頁 > **Connect to Git**，授權 GitHub 後選這個 repo
 3. 建置設定：
 
    | 欄位 | 值 |
@@ -75,23 +80,46 @@ Cloudflare Access 把整個站鎖成「只有我的 Google 帳號能登入」—
    | Build command | `npm run build` |
    | Build output directory | `out` |
 
-4. 展開 **Environment variables**，新增：
-   - `NEXT_PUBLIC_APPS_SCRIPT_URL` = 第一步的網址
-
-   （Node 版本由 repo 根目錄的 `.nvmrc` 決定，不必另外設 `NODE_VERSION`）
-5. **Save and Deploy**。之後每次 push 到 `main` 都會自動重新部署
+4. 展開 **Environment variables**，新增 `NEXT_PUBLIC_APPS_SCRIPT_URL` = 第一步的網址
+5. **Save and Deploy**
 
 網址會是 `https://<專案名>.pages.dev`。
+
+#### 路線 B：Workers
+
+如果建立畫面上寫的是「Configure your **Worker** project」、Deploy command 是
+`npx wrangler deploy`、而且**找不到 Build output directory 欄位**，那你在 Workers 流程。
+這條路靠 repo 根目錄的 [`wrangler.jsonc`](./wrangler.jsonc) 指定靜態資源目錄，照著填即可：
+
+| 欄位 | 值 |
+|---|---|
+| Build command | `npm run build` |
+| Deploy command | `npx wrangler deploy` |
+| Path | `/` |
+| Variable name | `NEXT_PUBLIC_APPS_SCRIPT_URL` |
+| Variable value | 第一步的網址 |
+
+網址會是 `https://<專案名>.<你的子網域>.workers.dev`。
+
+---
+
+兩條路都一樣：Node 版本由 `.nvmrc` 決定（不必另外設 `NODE_VERSION`），
+之後每次 push 到 `main` 都會自動重新部署。
 
 ### 第四步（重要）：把站鎖起來
 
 到這一步為止，任何知道網址的人都能打開你的片庫。要真正做到「只有自己看」：
 
-1. Cloudflare 儀表板 **Zero Trust > Access > Applications > Add an application > Self-hosted**
-2. Application domain 填你的 `*.pages.dev` 網址
-3. Policy：Action 選 **Allow**，Include 選 **Emails** 並填你自己的 email
-4. 儲存後，任何人打開網址都會先看到 Cloudflare 的登入頁，只有你的 email 收到的驗證碼能進去
+**走路線 A（Pages）**：最省事，有內建開關 ——
+**Workers & Pages > 你的專案 > Settings > Enable access policy**，
+填你自己的 email 即可，Cloudflare 會自動建好對應的 Access 應用程式。
 
+**走路線 B（Workers）**，或想自己調規則：
+1. **Zero Trust > Access > Applications > Add an application > Self-hosted**
+2. Application domain 填你的站台網址
+3. Policy：Action 選 **Allow**，Include 選 **Emails** 並填你自己的 email
+
+設好之後，任何人打開網址都會先看到 Cloudflare 的登入頁，只有你的 email 收得到驗證碼。
 免費方案含 50 個使用者，個人用綽綽有餘。
 
 ### 第五步：第一次使用
