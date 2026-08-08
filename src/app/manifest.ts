@@ -10,14 +10,20 @@ export default function manifest(): MetadataRoute.Manifest {
     start_url: '/',
     scope: '/',
     display: 'standalone',
+    orientation: 'portrait',
     background_color: '#0a0b10',
     theme_color: '#0a0b10',
+    categories: ['entertainment', 'utilities'],
+    lang: 'zh-TW',
+    dir: 'ltr',
     icons: [
-      {
-        src: '/icon.svg',
-        sizes: 'any',
-        type: 'image/svg+xml',
-      },
+      // Android 安裝需要 192 與 512 兩種 PNG，缺任一就不會出現安裝提示
+      { src: '/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+      { src: '/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+      // maskable 的內容縮在中央安全區，讓系統裁成圓形等形狀時不會切到圖
+      { src: '/icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+      // 向量版給支援的平台用
+      { src: '/icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
     ],
   };
 }

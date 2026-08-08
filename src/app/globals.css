@@ -68,6 +68,11 @@ body {
     "Microsoft JhengHei", "Helvetica Neue", sans-serif;
   font-feature-settings: "palt";
   position: relative;
+  /* viewport-fit: cover 讓內容延伸到瀏海與 home indicator 底下，
+     以 PWA 全螢幕執行時得把它們讓出來 */
+  padding:
+    env(safe-area-inset-top) env(safe-area-inset-right)
+    env(safe-area-inset-bottom) env(safe-area-inset-left);
 }
 
 /* 大氣層：角落暖冷雙色 radial */

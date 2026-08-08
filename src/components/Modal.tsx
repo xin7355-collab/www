@@ -26,7 +26,14 @@ export default function Modal({ title, onClose, children, wide, footer }: Props)
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm"
+      // fixed 定位會脫離 body 的安全區 padding，這裡自己讓開瀏海
+      style={{
+        paddingTop: 'max(1rem, env(safe-area-inset-top))',
+        paddingRight: 'max(1rem, env(safe-area-inset-right))',
+        paddingBottom: 'max(1rem, env(safe-area-inset-bottom))',
+        paddingLeft: 'max(1rem, env(safe-area-inset-left))',
+      }}
       onClick={onClose}
     >
       <div

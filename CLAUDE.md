@@ -64,6 +64,21 @@ Browser (Next.js static export)  ──►  Google Apps Script  ──►  Googl
 - `src/lib/schema.ts` — Sheet 列 ↔ `MediaItem` 映射、舊 schema 髒資料過濾
 - `src/components/*` — 純展示元件，`Modal.tsx` 是共用外殼
 
+### PWA
+
+- `public/sw.js` 是 service worker 的**原始檔**，含兩個佔位符。
+  `npm run build` 會接著跑 `scripts/build-sw.mjs`，掃描 `out/` 把實際的
+  產物清單與內容雜湊注入 `out/sw.js`。**改 `public/sw.js` 時不要動那兩行佔位符**，
+  build script 找不到會直接拋錯（這是刻意的，避免無聲失去離線能力）
+- 為什麼要注入清單：Next 的資源檔名帶雜湊，靜態 SW 事先不知道要快取什麼。
+  只靠 cache-first 被動累積的話，首次造訪時 SW 還沒接管，JS chunk 進不了快取 ——
+  離線會變成「HTML 開得起來但畫面全白」
+- SW 只在 production 註冊（`ServiceWorkerRegistrar`），否則會快取 HMR 資源導致改了程式碼看到舊畫面
+- iOS 需要 `apple-mobile-web-app-capable`，但 Next 只輸出標準化的 `mobile-web-app-capable`，
+  所以 `layout.tsx` 裡手動補了一行
+- `viewportFit: 'cover'` 搭配 `globals.css` 的 `env(safe-area-inset-*)`；
+  `Modal.tsx` 因為是 `fixed` 定位脫離 body padding，安全區要自己處理
+
 ### 靜態輸出限制
 
 - `next.config.js`：`output: 'export'`、`images.unoptimized`。
