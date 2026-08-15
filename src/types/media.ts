@@ -8,17 +8,50 @@ export type Country = (typeof COUNTRIES)[number];
 export const STATUSES = ['未觀看', '觀看中', '已完成', '棄劇'] as const;
 export type WatchStatus = (typeof STATUSES)[number];
 
+/**
+ * 來源平台選項。
+ *
+ * 兩件事必須守住：
+ * 1. **既有字串只能新增、不能改字或刪除** —— Sheet 存的是這裡的字面值，
+ *    改字等於讓舊資料對不上選項（ItemForm 會把對不上的值當成空的存回去）。
+ * 2. 這也是 `src/lib/watchUrl.ts` 網址辨識結果的值域：`detectPlatform()`
+ *    回傳的一定是這個清單裡的字串，型別會擋住寫錯的情況。
+ *
+ * 排序照「能站內播 → 台灣常見訂閱制 → 國際訂閱制 → 動漫 → 其他影音站」，
+ * `自架 / 直鏈` 與 `其他` 固定收尾。
+ */
 export const PLATFORMS = [
-  'Netflix',
-  'Disney+',
   'YouTube',
   'BiliBili',
-  'IQiyi',
+  'Vimeo',
+  'Dailymotion',
+  'Twitch',
+  'niconico',
+  'Internet Archive',
+  'Google Drive',
+  'Streamable',
+  'Netflix',
+  'Disney+',
+  'Prime Video',
+  'Max',
+  'Apple TV+',
+  'CATCHPLAY+',
+  'KKTV',
+  'LINE TV',
+  'LiTV',
+  'MyVideo',
   'Fridays影音',
   'Hami Video',
+  'IQiyi',
+  'Viu',
+  'WeTV',
+  '巴哈姆特動畫瘋',
+  'Crunchyroll',
   '自架 / 直鏈',
   '其他',
 ] as const;
+
+export type Platform = (typeof PLATFORMS)[number];
 
 export const GENRES = ['動作', '劇情', '喜劇', '愛情', '科幻', '懸疑', '恐怖', '紀錄', '奇幻'] as const;
 

@@ -50,8 +50,14 @@ Browser (Next.js static export)  ──►  Google Apps Script  ──►  Googl
 
 3. **這是連結目錄，不是媒體伺服器**。不存影片檔，只存 `watchUrl`。
    `src/lib/watchUrl.ts` 的 `resolveWatch()` 是核心：在**渲染時**判斷連結型別，
-   決定內嵌播放（YouTube / BiliBili / 直鏈）或開新分頁（gimy / 其他）。
+   決定內嵌播放或開新分頁。支援哪些站集中在同檔的 `SITES` 登記表 ——
+   **有 `embed` 就是站內播得起來，沒有就是站方擋內嵌只能外開**，加站就加一列。
+   `SiteRule.platform` 的型別是 `Platform`（`src/types/media.ts` 的 `PLATFORMS`），
+   所以加站時漏加平台名稱會被型別擋下。
+   判斷順序是**直鏈優先於登記表**：archive.org 這種同時有頁面與 `.mp4` 的站，
+   直鏈能記播放進度，比內嵌好用。
    gimy 只存作品 ID，網域來自 localStorage 全域設定 —— 換網域時改一個地方即可。
+   `detectPlatform()` 給表單自動填「來源平台」用，認不出來就回空字串（不猜）。
 
 ### 前端結構
 
@@ -103,6 +109,8 @@ Browser (Next.js static export)  ──►  Google Apps Script  ──►  Googl
   那在 static export 下會造成 hydration mismatch
 - **globals.css 的 `.field` 必須放在 `@layer components` 內**，否則未分層 CSS 會贏過
   Tailwind utility，`className` 上的 `w-auto` 之類會失效
+- **`PLATFORMS` 的既有字串只能新增不能改字**：Sheet 存的是字面值，改字會讓舊資料對不上選項。
+  `ItemForm` 已經會把「不在清單裡的既有值」補成一個 option，否則 select 顯示空白、一存檔就洗掉原值
 - TypeScript path alias：`@/*` → `./src/*`
 - 本機驗證前端流程時不需要真的 GAS，可以自己起一個符合合約的 mock HTTP 伺服器，
   把 `NEXT_PUBLIC_APPS_SCRIPT_URL` 指過去

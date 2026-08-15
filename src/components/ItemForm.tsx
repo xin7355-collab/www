@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Modal from './Modal';
-import { describeUrl } from '@/lib/watchUrl';
+import { describeUrl, detectPlatform } from '@/lib/watchUrl';
 import {
   COUNTRIES,
   GENRES,
@@ -55,7 +55,22 @@ export default function ItemForm({ initial, gimyDomain, busy, onSubmit, onClose 
   const set = <K extends keyof NewMediaItem>(key: K, value: NewMediaItem[K]) =>
     setForm((f) => ({ ...f, [key]: value }));
 
+  /** 貼上連結時順手把「來源平台」填好；已經選過就不覆蓋，人的選擇優先 */
+  const setWatchUrl = (value: string) =>
+    setForm((f) => ({
+      ...f,
+      watchUrl: value,
+      platform: f.platform || detectPlatform(value),
+    }));
+
   const urlHint = describeUrl(form.watchUrl, gimyDomain);
+
+  // 舊資料可能存著不在清單裡的平台字串（或手動改過 Sheet）。
+  // 不補這一個 option 的話 select 會顯示空白，一存檔就把原值洗掉。
+  const platformOptions: readonly string[] =
+    form.platform && !PLATFORMS.includes(form.platform as (typeof PLATFORMS)[number])
+      ? [form.platform, ...PLATFORMS]
+      : PLATFORMS;
   const canSubmit = Boolean(form.title.trim()) && !busy;
 
   return (
@@ -97,7 +112,7 @@ export default function ItemForm({ initial, gimyDomain, busy, onSubmit, onClose 
           <input
             className="field"
             value={form.watchUrl}
-            onChange={(e) => set('watchUrl', e.target.value)}
+            onChange={(e) => setWatchUrl(e.target.value)}
             placeholder="貼上 YouTube / BiliBili / 影片直鏈 / 站點網址"
           />
           {urlHint && (
@@ -194,7 +209,7 @@ export default function ItemForm({ initial, gimyDomain, busy, onSubmit, onClose 
               onChange={(e) => set('platform', e.target.value)}
             >
               <option value="">—</option>
-              {PLATFORMS.map((p) => (
+              {platformOptions.map((p) => (
                 <option key={p}>{p}</option>
               ))}
             </select>

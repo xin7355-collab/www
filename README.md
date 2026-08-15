@@ -14,12 +14,34 @@
 
 | 你貼的連結 | 行為 |
 |---|---|
-| YouTube | 站內播放器內嵌播放 |
-| BiliBili | 站內播放器內嵌播放 |
 | `.mp4` / `.webm` / `.m3u8` 等直鏈 | 站內原生播放器，**自動記住播到幾分幾秒**，下次接續 |
+| YouTube、BiliBili、Vimeo、Dailymotion、Twitch、niconico、Internet Archive、Google Drive、Streamable | 站內播放器內嵌播放 |
+| Netflix、Disney+、動畫瘋 等 17 個站 | 認得出平台名稱，新分頁開啟（站方擋內嵌，見下表） |
 | gimy 格式（`/vod/12345.html`） | 抽出作品 ID，用「設定」裡的全域網域重組成 `/eps/12345-1-{下一集}.html`，新分頁開啟 |
 | 其他任何網址 | 原樣新分頁開啟 |
 | 空白 | 不顯示開播按鈕 |
+
+貼上連結時，**「來源平台」欄會自動填好**（已經自己選過就不覆蓋）。
+
+<details>
+<summary>支援的來源站完整清單</summary>
+
+**站內播得起來**（有公開內嵌播放器）
+
+YouTube（含 `youtu.be`／Shorts，走 `youtube-nocookie` 且帶 `?t=` 起始秒數）、
+BiliBili（含 `b23.tv`，帶分 P）、Vimeo（含未公開影片的驗證雜湊）、
+Dailymotion（含 `dai.ly`）、Twitch（VOD／頻道／Clip）、niconico、
+Internet Archive、Google Drive（`/file/d/…` 的預覽播放器）、Streamable
+
+**只能新分頁開啟**（DRM 或站方用 `X-Frame-Options` 擋掉內嵌，任何前端都繞不過）
+
+Netflix、Disney+、Prime Video、Max、Apple TV+、CATCHPLAY+、KKTV、LINE TV、
+LiTV、MyVideo、Fridays影音、Hami Video、IQiyi、Viu、WeTV、巴哈姆特動畫瘋、Crunchyroll
+
+要再加一個站，改 `src/lib/watchUrl.ts` 的 `SITES` 登記表加一列即可；
+平台名稱要同時加進 `src/types/media.ts` 的 `PLATFORMS`（型別會擋住漏加的情況）。
+
+</details>
 
 gimy 那條是重點：**只存作品 ID，網域存在瀏覽器設定裡**。站方換網域時你只改「設定 > 站點網域」一個欄位，片庫裡所有作品的開播連結一起更新，不用逐條改。
 
