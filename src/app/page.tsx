@@ -8,6 +8,7 @@ import ItemForm from '@/components/ItemForm';
 import LoginScreen from '@/components/LoginScreen';
 import MediaCard from '@/components/MediaCard';
 import PlayerModal from '@/components/PlayerModal';
+import SearchModal from '@/components/SearchModal';
 import SettingsModal from '@/components/SettingsModal';
 import SiteCatalogModal from '@/components/SiteCatalogModal';
 import SiteShortcuts from '@/components/SiteShortcuts';
@@ -35,7 +36,8 @@ type Dialog =
   | { kind: 'play'; item: MediaItem }
   | { kind: 'delete'; item: MediaItem }
   | { kind: 'settings' }
-  | { kind: 'sites' };
+  | { kind: 'sites' }
+  | { kind: 'search' };
 
 export default function Home() {
   const accounts = useAccounts();
@@ -198,6 +200,14 @@ export default function Home() {
             {library.refreshing ? '…' : '↻'}
           </button>
           <button
+            onClick={() => setDialog({ kind: 'search' })}
+            className="h-9 w-9 rounded-lg border border-ink-border-strong text-mist-silver transition hover:border-moon-soft hover:text-moon"
+            aria-label="搜尋作品資料"
+            title="搜尋作品資料（名稱、封面、集數）"
+          >
+            🔍
+          </button>
+          <button
             onClick={playRandom}
             className="h-9 w-9 rounded-lg border border-ink-border-strong text-mist-silver transition hover:border-moon-soft hover:text-moon"
             aria-label="隨機挑一部"
@@ -340,6 +350,13 @@ export default function Home() {
           message={`確定要從片庫移除「${active.item.title}」嗎？這會一併刪掉 Google Sheets 裡的該列紀錄。`}
           confirmLabel="刪除"
           onConfirm={() => library.removeItem(active.item.rowNumber)}
+          onClose={close}
+        />
+      )}
+
+      {active.kind === 'search' && (
+        <SearchModal
+          onPick={(prefill) => setDialog({ kind: 'add', prefill })}
           onClose={close}
         />
       )}

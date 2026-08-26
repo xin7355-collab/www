@@ -66,6 +66,10 @@ function doGet(e) {
       return response(fetchMeta(e.parameter.url));
     }
 
+    if (action === 'search') {
+      return response(searchWorks(e.parameter.q, e.parameter.kind));
+    }
+
     var sheetName = (e && e.parameter && e.parameter.sheet) ? e.parameter.sheet : null;
     return response(getSheetData(ss, sheetName));
 
@@ -472,6 +476,114 @@ function getJson(url) {
   } catch (err) {
     return null;
   }
+}
+
+// ─── 作品搜尋 ─────────────────────────────────────────────────
+//
+// 讓使用者不必先跑去別的網站查資料。三個來源都**不需要 API key**：
+//   Apple iTunes  —— 電影與影集，有封面、年份、集數
+//   Bangumi       —— 動漫與漫畫，中日文名稱、話數
+//   Google Books  —— 小說
+//
+// 沒指定分類就三個都問。刻意不併發 —— Apps Script 的 fetchAll 一旦有一個
+// 端點卡住就整批等，逐一問反而穩，而且單次都在幾秒內。
+
+function searchWorks(q, kind) {
+  var query = String(q || '').trim();
+  if (!query) throw new Error('請輸入要搜尋的關鍵字');
+
+  var want = String(kind || '');
+  var out = [];
+
+  if (!want || want === '電影') out = out.concat(itunesSearch(query, '電影'));
+  if (!want || want === '影集') out = out.concat(itunesSearch(query, '影集'));
+  if (!want || want === '動漫') out = out.concat(bangumiSearch(query, 2, '動漫'));
+  if (want === '漫畫') out = out.concat(bangumiSearch(query, 1, '漫畫'));
+  if (!want || want === '小說') out = out.concat(booksSearch(query));
+
+  if (out.length === 0) throw new Error('查無結果，換個關鍵字或改用原文名稱試試');
+  return out.slice(0, 40);
+}
+
+function itunesSearch(q, kind) {
+  var media = kind === '影集' ? 'tvShow' : 'movie';
+  var data = getJson(
+    'https://itunes.apple.com/search?country=TW&limit=8&media=' + media +
+    '&term=' + encodeURIComponent(q)
+  );
+  if (!data || !data.results) return [];
+
+  return data.results.map(function (r) {
+    return {
+      title: r.trackName || r.collectionName || '',
+      // 100x100 是縮圖，換成 600x600 才看得清楚
+      cover: String(r.artworkUrl100 || '').replace('100x100', '600x600'),
+      subtitle: [r.artistName, String(r.releaseDate || '').slice(0, 4)]
+        .filter(Boolean).join(' · '),
+      totalEp: r.trackCount ? String(r.trackCount) : '',
+      mainType: kind,
+      country: '',
+      url: r.trackViewUrl || r.collectionViewUrl || '',
+      source: 'Apple'
+    };
+  }).filter(nonEmptyTitle);
+}
+
+function bangumiSearch(q, type, mainType) {
+  var data = getJson(
+    'https://api.bgm.tv/search/subject/' + encodeURIComponent(q) +
+    '?type=' + type + '&responseGroup=small&max_results=8'
+  );
+  var list = data && data.list;
+  if (!list || !list.length) return [];
+
+  return list.map(function (r) {
+    var images = r.images || {};
+    var name = r.name_cn || r.name || '';
+    return {
+      title: name,
+      cover: httpsify(images.large || images.common || images.medium || ''),
+      subtitle: (r.name && r.name !== name) ? r.name : '',
+      totalEp: r.eps ? String(r.eps) : '',
+      mainType: mainType,
+      country: '日本',
+      url: r.url || '',
+      source: 'Bangumi'
+    };
+  }).filter(nonEmptyTitle);
+}
+
+function booksSearch(q) {
+  var data = getJson(
+    'https://www.googleapis.com/books/v1/volumes?maxResults=8&q=' + encodeURIComponent(q)
+  );
+  var items = data && data.items;
+  if (!items || !items.length) return [];
+
+  return items.map(function (r) {
+    var v = r.volumeInfo || {};
+    var links = v.imageLinks || {};
+    return {
+      title: v.title || '',
+      cover: httpsify(links.thumbnail || links.smallThumbnail || ''),
+      subtitle: [(v.authors || []).join('、'), String(v.publishedDate || '').slice(0, 4)]
+        .filter(Boolean).join(' · '),
+      totalEp: v.pageCount ? String(v.pageCount) : '',
+      mainType: '小說',
+      country: '',
+      url: v.infoLink || v.canonicalVolumeLink || '',
+      source: 'Google Books'
+    };
+  }).filter(nonEmptyTitle);
+}
+
+function nonEmptyTitle(x) {
+  return Boolean(x.title);
+}
+
+/** 有些來源給的圖是 http，混在 https 頁面裡會被瀏覽器擋掉 */
+function httpsify(url) {
+  return String(url || '').replace(/^http:\/\//i, 'https://');
 }
 
 // ─── 工具 ─────────────────────────────────────────────────────

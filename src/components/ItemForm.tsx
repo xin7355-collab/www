@@ -17,8 +17,8 @@ import {
 interface Props {
   /** 有值＝編輯模式，沒值＝新增模式 */
   initial?: MediaItem;
-  /** 新增模式時的預填內容（剪貼簿 / 分享目標 / 書籤小工具帶進來的） */
-  prefill?: { url?: string; title?: string };
+  /** 新增模式時的預填內容（剪貼簿 / 分享目標 / 書籤小工具 / 搜尋帶進來的） */
+  prefill?: Partial<NewMediaItem> & { url?: string };
   gimyDomain: string;
   busy?: boolean;
   onSubmit: (item: NewMediaItem) => void | Promise<void>;
@@ -59,12 +59,14 @@ export default function ItemForm({
 }: Props) {
   const [form, setForm] = useState<NewMediaItem>(() => {
     if (!initial) {
-      const url = prefill?.url?.trim() ?? '';
+      const { url, ...rest } = prefill ?? {};
+      const watchUrl = (url ?? rest.watchUrl ?? '').trim();
       return {
         ...blank(),
-        title: prefill?.title?.trim() ?? '',
-        watchUrl: url,
-        platform: url ? detectPlatform(url) : '',
+        ...rest,
+        title: (rest.title ?? '').trim(),
+        watchUrl,
+        platform: rest.platform || (watchUrl ? detectPlatform(watchUrl) : ''),
       };
     }
     const { rowNumber: _r, updatedAt: _u, ...rest } = initial;

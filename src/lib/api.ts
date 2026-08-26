@@ -196,6 +196,47 @@ export async function fetchMeta(url: string): Promise<UrlMeta> {
   };
 }
 
+// ─── 作品搜尋 ─────────────────────────────────────────────────
+
+export interface SearchResult {
+  title: string;
+  subtitle: string;
+  cover: string;
+  totalEp: string;
+  mainType: string;
+  country: string;
+  /** 資料來源的頁面，不是觀看連結 */
+  url: string;
+  source: string;
+}
+
+/**
+ * 在片庫裡直接查作品資料，不必先跑去別的網站。
+ * 後端問的是不需要 API key 的公開來源（Apple / Bangumi / Google Books）。
+ */
+export async function searchWorks(q: string, kind: string): Promise<SearchResult[]> {
+  const data = await get({ action: 'search', q, kind });
+
+  // 舊版腳本不認得 search，會掉進「讀取分頁」的預設分支回二維陣列
+  if (Array.isArray(data) && data.some((x) => Array.isArray(x))) {
+    throw new ApiError(
+      '後端腳本是舊版，還不會搜尋。請把新版 apps-script-code.gs 貼進 Apps Script，再「部署 > 管理部署 > 編輯 > 版本：全新版本」重新發佈。',
+    );
+  }
+  if (!Array.isArray(data)) throw new ApiError('搜尋結果格式異常');
+
+  return (data as Partial<SearchResult>[]).map((r) => ({
+    title: r.title ?? '',
+    subtitle: r.subtitle ?? '',
+    cover: r.cover ?? '',
+    totalEp: r.totalEp ?? '',
+    mainType: r.mainType ?? '',
+    country: r.country ?? '',
+    url: r.url ?? '',
+    source: r.source ?? '',
+  }));
+}
+
 // ─── 帳號 ─────────────────────────────────────────────────────
 
 export async function fetchAccounts(): Promise<string[]> {
