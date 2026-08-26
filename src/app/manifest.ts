@@ -14,6 +14,18 @@ export default function manifest(): MetadataRoute.Manifest {
     background_color: '#0a0b10',
     theme_color: '#0a0b10',
     categories: ['entertainment', 'utilities'],
+    // 手機上從瀏覽器/任何 app 分享網址過來，直接開新增表單並帶入網址。
+    // 走 GET 是因為靜態站沒有伺服器可以接 POST —— 參數會變成 query string，
+    // 由 src/lib/quickAdd.ts 解析。
+    share_target: {
+      action: '/',
+      method: 'GET',
+      params: { title: 'title', text: 'text', url: 'url' },
+    },
+    // 長按 app 圖示的快捷選單
+    shortcuts: [
+      { name: '新增作品', short_name: '新增', url: '/?new=1' },
+    ],
     lang: 'zh-TW',
     dir: 'ltr',
     icons: [

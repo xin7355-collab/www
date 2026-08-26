@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import BulkAddModal from '@/components/BulkAddModal';
 import ConfirmModal from '@/components/ConfirmModal';
 import FilterBar from '@/components/FilterBar';
 import ItemForm from '@/components/ItemForm';
@@ -8,15 +9,19 @@ import LoginScreen from '@/components/LoginScreen';
 import MediaCard from '@/components/MediaCard';
 import PlayerModal from '@/components/PlayerModal';
 import SettingsModal from '@/components/SettingsModal';
+import SiteShortcuts from '@/components/SiteShortcuts';
 import { useAccounts } from '@/hooks/useAccounts';
 import { useLibrary } from '@/hooks/useLibrary';
 import { useSettings } from '@/hooks/useSettings';
+import { clearShared, useSharedInput } from '@/lib/quickAdd';
+import { useShortcuts } from '@/lib/shortcuts';
 import { resolveWatch } from '@/lib/watchUrl';
 import { MediaItem, NewMediaItem } from '@/types/media';
 
 type Dialog =
   | { kind: 'none' }
-  | { kind: 'add' }
+  | { kind: 'add'; prefill?: { url?: string; title?: string } }
+  | { kind: 'bulk' }
   | { kind: 'edit'; item: MediaItem }
   | { kind: 'play'; item: MediaItem }
   | { kind: 'delete'; item: MediaItem }
@@ -26,9 +31,36 @@ export default function Home() {
   const accounts = useAccounts();
   const { gimyDomain, saveGimyDomain } = useSettings();
   const library = useLibrary(accounts.isLoggedIn ? accounts.currentAccount : '');
+  const shortcuts = useShortcuts();
+  const shared = useSharedInput();
   const [dialog, setDialog] = useState<Dialog>({ kind: 'none' });
 
-  const close = () => setDialog({ kind: 'none' });
+  const close = () => {
+    setDialog({ kind: 'none' });
+    clearShared();
+  };
+
+  /**
+   * 從外面帶網址進來（手機分享、書籤小工具）時直接開新增表單。
+   * 刻意由 query 推導而不是在 effect 裡 setState —— 靜態輸出下那會造成
+   * hydration mismatch，這個專案把該規則設成 error。
+   */
+  const active: Dialog = dialog.kind === 'none' && shared ? { kind: 'add', prefill: shared } : dialog;
+
+  /** 剪貼簿裡若是網址就直接帶進新增表單，省掉「開表單→貼上」兩步 */
+  const addFromClipboard = async () => {
+    try {
+      const text = (await navigator.clipboard.readText()).trim();
+      const url = /https?:\/\/\S+/.exec(text)?.[0] ?? '';
+      if (!url) {
+        library.setError('剪貼簿裡沒有網址');
+        return;
+      }
+      setDialog({ kind: 'add', prefill: { url } });
+    } catch {
+      library.setError('讀不到剪貼簿 —— 瀏覽器可能擋了權限，直接用「＋ 新增」貼上即可');
+    }
+  };
 
   if (accounts.initializing) {
     return (
@@ -67,8 +99,8 @@ export default function Home() {
   };
 
   const handleSubmit = async (values: NewMediaItem) => {
-    if (dialog.kind === 'edit') {
-      await library.patchItem(dialog.item.rowNumber, values);
+    if (active.kind === 'edit') {
+      await library.patchItem(active.item.rowNumber, values);
       close();
       return;
     }
@@ -105,6 +137,14 @@ export default function Home() {
             {library.refreshing ? '…' : '↻'}
           </button>
           <button
+            onClick={addFromClipboard}
+            className="h-9 w-9 rounded-lg border border-ink-border-strong text-mist-silver transition hover:border-moon-soft hover:text-moon"
+            aria-label="貼上網址新增"
+            title="從剪貼簿貼上網址新增"
+          >
+            📋
+          </button>
+          <button
             onClick={() => setDialog({ kind: 'settings' })}
             className="h-9 w-9 rounded-lg border border-ink-border-strong text-mist-silver transition hover:border-moon-soft hover:text-moon"
             aria-label="設定"
@@ -131,6 +171,12 @@ export default function Home() {
         sortKey={library.sortKey}
         setSortKey={library.setSortKey}
         counts={counts}
+      />
+
+      <SiteShortcuts
+        shortcuts={shortcuts}
+        tab={library.tab}
+        onManage={() => setDialog({ kind: 'settings' })}
       />
 
       {library.error && (
@@ -181,22 +227,28 @@ export default function Home() {
       </section>
 
       {/* Dialogs */}
-      {(dialog.kind === 'add' || dialog.kind === 'edit') && (
+      {(active.kind === 'add' || active.kind === 'edit') && (
         <ItemForm
-          initial={dialog.kind === 'edit' ? dialog.item : undefined}
+          initial={active.kind === 'edit' ? active.item : undefined}
+          prefill={active.kind === 'add' ? active.prefill : undefined}
           gimyDomain={gimyDomain}
           busy={library.busy}
           onSubmit={handleSubmit}
           onClose={close}
+          onBulk={active.kind === 'add' ? () => setDialog({ kind: 'bulk' }) : undefined}
         />
       )}
 
-      {dialog.kind === 'play' &&
+      {active.kind === 'bulk' && (
+        <BulkAddModal busy={library.busy} onSubmit={library.addMany} onClose={close} />
+      )}
+
+      {active.kind === 'play' &&
         (() => {
           // 播放中按「看完這集 +1」會改動清單，這裡取最新的那筆，
           // 否則 footer 的進度會停在開啟播放器當下的快照
           const live =
-            library.items.find((it) => it.rowNumber === dialog.item.rowNumber) ?? dialog.item;
+            library.items.find((it) => it.rowNumber === active.item.rowNumber) ?? active.item;
           return (
             <PlayerModal
               item={live}
@@ -207,19 +259,20 @@ export default function Home() {
           );
         })()}
 
-      {dialog.kind === 'delete' && (
+      {active.kind === 'delete' && (
         <ConfirmModal
           title="刪除作品"
-          message={`確定要從片庫移除「${dialog.item.title}」嗎？這會一併刪掉 Google Sheets 裡的該列紀錄。`}
+          message={`確定要從片庫移除「${active.item.title}」嗎？這會一併刪掉 Google Sheets 裡的該列紀錄。`}
           confirmLabel="刪除"
-          onConfirm={() => library.removeItem(dialog.item.rowNumber)}
+          onConfirm={() => library.removeItem(active.item.rowNumber)}
           onClose={close}
         />
       )}
 
-      {dialog.kind === 'settings' && (
+      {active.kind === 'settings' && (
         <SettingsModal
           gimyDomain={gimyDomain}
+          shortcuts={shortcuts}
           account={accounts.currentAccount}
           onSave={saveGimyDomain}
           onClose={close}

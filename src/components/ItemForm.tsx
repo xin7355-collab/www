@@ -16,10 +16,14 @@ import {
 interface Props {
   /** 有值＝編輯模式，沒值＝新增模式 */
   initial?: MediaItem;
+  /** 新增模式時的預填內容（剪貼簿 / 分享目標 / 書籤小工具帶進來的） */
+  prefill?: { url?: string; title?: string };
   gimyDomain: string;
   busy?: boolean;
   onSubmit: (item: NewMediaItem) => void | Promise<void>;
   onClose: () => void;
+  /** 只有新增模式給：切換到批次加入 */
+  onBulk?: () => void;
 }
 
 const blank = (): NewMediaItem => ({
@@ -43,9 +47,25 @@ function Label({ children }: { children: React.ReactNode }) {
   return <span className="mb-1 block text-[11px] tracking-wider text-mist-shadow">{children}</span>;
 }
 
-export default function ItemForm({ initial, gimyDomain, busy, onSubmit, onClose }: Props) {
+export default function ItemForm({
+  initial,
+  prefill,
+  gimyDomain,
+  busy,
+  onSubmit,
+  onClose,
+  onBulk,
+}: Props) {
   const [form, setForm] = useState<NewMediaItem>(() => {
-    if (!initial) return blank();
+    if (!initial) {
+      const url = prefill?.url?.trim() ?? '';
+      return {
+        ...blank(),
+        title: prefill?.title?.trim() ?? '',
+        watchUrl: url,
+        platform: url ? detectPlatform(url) : '',
+      };
+    }
     const { rowNumber: _r, updatedAt: _u, ...rest } = initial;
     void _r;
     void _u;
@@ -78,7 +98,15 @@ export default function ItemForm({ initial, gimyDomain, busy, onSubmit, onClose 
       title={initial ? '編輯作品' : '新增作品'}
       onClose={onClose}
       footer={
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
+          {onBulk && (
+            <button
+              onClick={onBulk}
+              className="shrink-0 text-[11px] text-mist-shadow underline-offset-2 transition hover:text-moon hover:underline"
+            >
+              批次加入
+            </button>
+          )}
           <button
             onClick={onClose}
             className="flex-1 rounded-lg border border-ink-border-strong py-2 text-sm text-mist-silver transition hover:text-mist"

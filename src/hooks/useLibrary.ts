@@ -120,6 +120,33 @@ export function useLibrary(account: string) {
     }
   };
 
+  /**
+   * 批次新增。刻意一筆一筆送而不並行 —— 後端每次 append 都會改變列號，
+   * 並行的話回傳的 rowNumber 會互相踩到，本地清單就對不上真實列。
+   * 中途失敗就停下並回報已成功的筆數，不假裝全部成功。
+   */
+  const addMany = async (list: NewMediaItem[]) => {
+    setBusy(true);
+    setError('');
+    let added = 0;
+    try {
+      for (const item of list) {
+        const rowNumber = await api.addItem(account, item);
+        const today = stamp();
+        setItems((prev) => [
+          ...prev,
+          { ...item, rowNumber, updatedAt: today, addedDate: item.addedDate || today },
+        ]);
+        added += 1;
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '批次新增中斷');
+    } finally {
+      setBusy(false);
+    }
+    return added;
+  };
+
   const removeItem = async (row: number) => {
     const snapshot = items;
     // 刪除會讓後面每一列的 rowNumber 往前移一位，本地要跟著調整，
@@ -190,6 +217,7 @@ export function useLibrary(account: string) {
     patchItem,
     bumpProgress,
     addItem,
+    addMany,
     removeItem,
   };
 }

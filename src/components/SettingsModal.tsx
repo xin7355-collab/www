@@ -3,10 +3,13 @@
 import { useState } from 'react';
 import Modal from './Modal';
 import { maskedUrl, probe, Probe } from '@/lib/api';
+import { addShortcut, removeShortcut, SiteShortcut } from '@/lib/shortcuts';
 import { DEFAULT_GIMY_DOMAIN } from '@/lib/watchUrl';
+import { MAIN_TYPES } from '@/types/media';
 
 interface Props {
   gimyDomain: string;
+  shortcuts: SiteShortcut[];
   account: string;
   onSave: (domain: string) => void;
   onClose: () => void;
@@ -16,6 +19,7 @@ interface Props {
 
 export default function SettingsModal({
   gimyDomain,
+  shortcuts,
   account,
   onSave,
   onClose,
@@ -26,6 +30,32 @@ export default function SettingsModal({
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [testing, setTesting] = useState(false);
   const [result, setResult] = useState<Probe | null>(null);
+  const [scLabel, setScLabel] = useState('');
+  const [scUrl, setScUrl] = useState('');
+  const [scType, setScType] = useState('');
+  const [copied, setCopied] = useState(false);
+
+  const submitShortcut = () => {
+    if (!scUrl.trim()) return;
+    addShortcut(shortcuts, scLabel, scUrl, scType);
+    setScLabel('');
+    setScUrl('');
+  };
+
+  /**
+   * 書籤小工具：在任何網頁點一下，就把該頁的網址與標題帶回片庫的新增表單。
+   * 標題只有在該頁自己的執行環境才拿得到 —— 靜態站沒有伺服器可以代抓網頁。
+   */
+  const copyBookmarklet = async () => {
+    const origin = window.location.origin;
+    const code = `javascript:void(window.open('${origin}/?url='+encodeURIComponent(location.href)+'&title='+encodeURIComponent(document.title)))`;
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopied(true);
+    } catch {
+      setCopied(false);
+    }
+  };
 
   const runProbe = async () => {
     setTesting(true);
@@ -66,6 +96,101 @@ export default function SettingsModal({
           <p className="mt-1.5 text-[11px] text-mist-shadow">
             此設定存在瀏覽器本機，換裝置需要重設一次。
           </p>
+        </section>
+
+        <section className="border-t border-ink-border pt-5">
+          <h3 className="mb-1 text-sm text-mist">常用站點捷徑</h3>
+          <p className="mb-2.5 text-[11px] leading-relaxed text-mist-shadow">
+            片庫上方會出現這些連結，一鍵前往你常去找片的站。
+            綁了分類的捷徑只在該分類出現，不綁就是每個分類都顯示。
+          </p>
+
+          {shortcuts.length > 0 && (
+            <div className="mb-2.5 space-y-1">
+              {shortcuts.map((sc) => (
+                <div
+                  key={sc.id}
+                  className="flex items-center gap-2 rounded-lg border border-ink-border px-2.5 py-1.5"
+                >
+                  <span className="shrink-0 text-xs text-mist">{sc.label}</span>
+                  {sc.type && (
+                    <span className="shrink-0 rounded border border-ink-border-strong px-1 text-[10px] text-mist-shadow">
+                      {sc.type}
+                    </span>
+                  )}
+                  <span className="flex-1 truncate text-[10px] text-mist-shadow">{sc.url}</span>
+                  <button
+                    onClick={() => removeShortcut(shortcuts, sc.id)}
+                    className="shrink-0 text-mist-shadow transition hover:text-cinnabar"
+                    aria-label={`刪除 ${sc.label}`}
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="flex flex-wrap gap-2">
+            <input
+              className="field w-24 shrink-0"
+              value={scLabel}
+              onChange={(e) => setScLabel(e.target.value)}
+              placeholder="名稱"
+            />
+            <input
+              className="field min-w-40 flex-1"
+              value={scUrl}
+              onChange={(e) => setScUrl(e.target.value)}
+              placeholder="https://…"
+            />
+            <select
+              className="field w-auto shrink-0"
+              value={scType}
+              onChange={(e) => setScType(e.target.value)}
+            >
+              <option value="">所有分類</option>
+              {MAIN_TYPES.map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </select>
+            <button
+              onClick={submitShortcut}
+              disabled={!scUrl.trim()}
+              className="shrink-0 rounded-lg border border-ink-border-strong px-3 text-sm text-mist-silver transition hover:border-moon-soft hover:text-moon disabled:opacity-40"
+            >
+              加入
+            </button>
+          </div>
+        </section>
+
+        <section className="border-t border-ink-border pt-5">
+          <h3 className="mb-1 text-sm text-mist">快速加入</h3>
+          <p className="mb-2.5 text-[11px] leading-relaxed text-mist-shadow">
+            三種不用手動打字的加入方式：
+          </p>
+          <ul className="mb-3 space-y-1.5 text-[11px] leading-relaxed text-mist-shadow">
+            <li>
+              <span className="text-mist-silver">📋 剪貼簿</span> —— 複製網址後，按片庫右上角的
+              📋，自動帶入新增表單
+            </li>
+            <li>
+              <span className="text-mist-silver">手機分享</span> ——
+              在瀏覽器或任何 app 點分享，選「我的片庫」（需先把本站加到主畫面；iOS 不支援這個功能）
+            </li>
+            <li>
+              <span className="text-mist-silver">書籤小工具</span> ——
+              桌機在任何影片頁點一下，連網頁標題一起帶回來
+            </li>
+          </ul>
+          <button
+            onClick={copyBookmarklet}
+            className="w-full rounded-lg border border-ink-border-strong py-2 text-xs text-mist-silver transition hover:border-moon-soft hover:text-moon"
+          >
+            {copied ? '已複製 —— 貼進新書籤的網址欄即可' : '複製書籤小工具程式碼'}
+          </button>
         </section>
 
         <section className="border-t border-ink-border pt-5">
