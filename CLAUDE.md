@@ -74,9 +74,22 @@ Browser (Next.js static export)  ──►  Google Apps Script  ──►  Googl
 - `src/hooks/useLibrary.ts` — 片庫全部狀態（清單、篩選、排序、樂觀更新）
 - `src/hooks/useSettings.ts` — 站點網域設定 + 直鏈影片的播放進度
 - `src/lib/localStore.ts` — localStorage 的 `useSyncExternalStore` 封裝
-- `src/lib/api.ts` — GAS HTTP 層，統一錯誤處理
+- `src/lib/api.ts` — GAS HTTP 層、統一錯誤處理，以及 `probe()` 連線診斷
 - `src/lib/schema.ts` — Sheet 列 ↔ `MediaItem` 映射、舊 schema 髒資料過濾
+- `src/lib/quickAdd.ts` — 外部帶網址進來新增的統一入口（分享目標 / 書籤小工具 / 剪貼簿）
+- `src/lib/shortcuts.ts` — 使用者自訂的常用站點捷徑，存 localStorage
+- `src/lib/backup.ts` — 片庫匯出匯入（純 JSON，以「同名同連結」判重）
 - `src/components/*` — 純展示元件，`Modal.tsx` 是共用外殼
+
+### 快速加入的四條路，最後都收斂成同一組 query
+
+`share_target`（manifest）、書籤小工具、`?new=1`（app 圖示長按）與剪貼簿按鈕，
+最後都變成 `?url=&title=` 由 `quickAdd.ts` 解析。**query 用 `useSyncExternalStore` 讀，
+不要用 `useEffect` + `setState`** —— 靜態輸出下那會造成 hydration mismatch。
+分享目標走 GET 而不是 POST，因為靜態站沒有伺服器可以接 POST。
+
+`page.tsx` 的 `active` 是「query 推導出來的 dialog」與「使用者操作的 dialog」的合流，
+刻意不在 effect 裡 setState 來開表單，同上理由。
 
 ### PWA
 
@@ -92,6 +105,17 @@ Browser (Next.js static export)  ──►  Google Apps Script  ──►  Googl
   所以 `layout.tsx` 裡手動補了一行
 - `viewportFit: 'cover'` 搭配 `globals.css` 的 `env(safe-area-inset-*)`；
   `Modal.tsx` 因為是 `fixed` 定位脫離 body padding，安全區要自己處理
+
+### 播放器
+
+- 直鏈的 `.m3u8` **只有 Safari 原生播得動**，其餘瀏覽器靠 `hls.js`。
+  它是 `import()` 動態載入的，不播串流就不會下載那包（快 600KB）
+- `scripts/build-sw.mjs` 的預快取範圍是**「HTML 真的引用到的產物」**，
+  所以動態載入的 chunk 不會被預先下載 —— 串流播放本來就需要網路，
+  預快取它對離線沒有幫助，只是白吃流量。加新的動態 import 時不必特別處理
+- 播放期間請求 Wake Lock（螢幕不休眠），暫停時放掉
+- 鍵盤快捷鍵綁在播放器與全站兩層，**輸入框聚焦時兩邊都要讓開**，
+  否則打字會變成亂按播放器
 
 ### 靜態輸出限制
 
