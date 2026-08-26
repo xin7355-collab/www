@@ -158,6 +158,24 @@ Browser (Next.js static export)  ──►  Google Apps Script  ──►  Googl
 - 兩條路用 `Promise.allSettled`：舊版 GAS 不認得 `search` 必定失敗，
   但那不該把 Bangumi 的結果一起拖死
 
+### 播出排程（TVmaze）
+
+- **為什麼要另外接一支 API**：Bangumi 的分集播出日只有日本動畫有，陸劇、韓劇、
+  連載中的國漫幾乎都是 0 個播出日。TVmaze 補的正是這幾個洞，免金鑰、CORS 全開
+- **授權是 CC BY-SA，必須標示來源** —— 綁定區塊那個連回 TVmaze 作品頁的連結不可以拿掉
+- **要使用者手動綁定，不自動比對名稱**：季別後綴、譯名、同名作品都會讓比對出錯，
+  猜錯的分母比沒有分母更糟
+- 搜尋前要 `bareTitle()` 削掉季別後綴 —— TVmaze 收的是「整部作品」，
+  「進擊的巨人 最終季」查不到，削成「進擊的巨人」才有；而且繁簡都要送
+- **進度分母用「已播集數」而不是分集清單長度**：TVmaze 連已公布但還沒播的都收，
+  拿那個當分母會憑空多出幾集。進度條要回答的是「離最新一集差幾集」
+- 下一集的集數用**清單位置**換算成絕對集數：使用者記的是「第 188 集」，
+  TVmaze 標的是 S8E12
+- 綁定與排程存 localStorage（`src/lib/schedule.ts`），因為那是隨時可重抓的衍生資料，
+  而 Sheet 的 15 欄是固定 schema，為它加欄位要同時改三個檔案
+- 背景更新的 effect **相依的是字串簽章**而不是整包物件 ——
+  那個物件每次 render 都是新的，放進相依陣列會無限重跑
+
 ### 狀態同步模式
 
 `useLibrary` 用「本地樂觀更新 + 背景 POST」：`patchItem`、`bumpProgress`、`removeItem`

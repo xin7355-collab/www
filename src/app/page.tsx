@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import BulkAddModal from '@/components/BulkAddModal';
 import ConfirmModal from '@/components/ConfirmModal';
 import FilterBar from '@/components/FilterBar';
@@ -16,6 +16,15 @@ import { useAccounts } from '@/hooks/useAccounts';
 import { useLibrary } from '@/hooks/useLibrary';
 import { useSettings } from '@/hooks/useSettings';
 import { historyKey, indexHistory, useHistory } from '@/lib/history';
+import {
+  isStale,
+  readSchedules,
+  saveSchedule,
+  scheduleKey,
+  signature,
+  useSchedules,
+} from '@/lib/schedule';
+import { fetchSchedule } from '@/lib/tvmaze';
 import { clearShared, useSharedInput } from '@/lib/quickAdd';
 import { useShortcuts } from '@/lib/shortcuts';
 import { resolveWatch } from '@/lib/watchUrl';
@@ -25,6 +34,8 @@ import { MediaItem, NewMediaItem } from '@/types/media';
  * 隨機取一個。刻意定義在元件外：Math.random 是不純函式，
  * 寫在元件內會被 React Compiler 擋下（同一次 render 可能得到不同結果）。
  */
+const stamp = () => Date.now();
+
 function pickRandom<T>(list: T[]): T {
   return list[Math.floor(Math.random() * list.length)];
 }
@@ -47,11 +58,39 @@ export default function Home() {
   const shortcuts = useShortcuts();
   const shared = useSharedInput();
   const history = useHistory();
+  const schedules = useSchedules();
 
   // 「現在」只取一次：Date.now 是不純函式，寫在 render 裡會被 React Compiler 擋下，
   // 而且每張卡各自呼叫也沒意義 —— 同一次渲染本來就該用同一個時間基準
-  const [now] = useState(() => Date.now());
+  const [now] = useState(stamp);
   const [dialog, setDialog] = useState<Dialog>({ kind: 'none' });
+
+  /**
+   * 排程過期就在背景重抓。播出表一天變不了幾次，所以只在超過 12 小時才動。
+   * 作品名稱從鍵裡取回來（鍵是「名稱::連結」），這樣 effect 就不必相依整份片庫。
+   *
+   * 位置很重要：必須在下面那幾個 early return **之前** ——
+   * hooks 的呼叫順序每次 render 都得一樣。
+   */
+  const refreshing = useRef(new Set<string>());
+  const scheduleSignature = signature(schedules);
+  useEffect(() => {
+    const at = stamp();
+    const inFlight = refreshing.current;
+
+    for (const [key, binding] of Object.entries(readSchedules())) {
+      if (!isStale(binding, at) || inFlight.has(key)) continue;
+
+      inFlight.add(key);
+      fetchSchedule(binding.showId, key.split('::')[0])
+        .then((schedule) => saveSchedule(key, schedule, stamp()))
+        .catch(() => {
+          // 抓不到就維持舊資料，下次進來再試 —— 不值得為此打斷使用者
+        })
+        .finally(() => inFlight.delete(key));
+    }
+  }, [scheduleSignature]);
+
 
   const close = () => {
     setDialog({ kind: 'none' });
@@ -179,6 +218,7 @@ export default function Home() {
 
   const watched = indexHistory(history);
 
+
   /**
    * 繼續觀看：依觀看時間排序的最近幾部，只在「全部」分類且沒有其他篩選時出現 ——
    * 使用者正在找特定東西的時候，上面多一排無關的卡片只會擋路。
@@ -303,6 +343,7 @@ export default function Home() {
                   gimyDomain={gimyDomain}
                   history={watched.get(historyKey(item))}
                   now={now}
+                  binding={schedules[scheduleKey(item)]}
                   onPlay={handlePlay}
                   onEdit={(it) => setDialog({ kind: 'edit', item: it })}
                   onDelete={(it) => setDialog({ kind: 'delete', item: it })}
@@ -340,6 +381,7 @@ export default function Home() {
                 gimyDomain={gimyDomain}
                 history={watched.get(historyKey(item))}
                 now={now}
+                binding={schedules[scheduleKey(item)]}
                 onPlay={handlePlay}
                 onEdit={(it) => setDialog({ kind: 'edit', item: it })}
                 onDelete={(it) => setDialog({ kind: 'delete', item: it })}
@@ -360,6 +402,7 @@ export default function Home() {
           onSubmit={handleSubmit}
           onClose={close}
           onBulk={active.kind === 'add' ? (text) => setDialog({ kind: 'bulk', text }) : undefined}
+          binding={active.kind === 'edit' ? schedules[scheduleKey(active.item)] : undefined}
         />
       )}
 

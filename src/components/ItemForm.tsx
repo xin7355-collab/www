@@ -2,7 +2,9 @@
 
 import { useState } from 'react';
 import Modal from './Modal';
+import ScheduleBinder from './ScheduleBinder';
 import { fetchMeta } from '@/lib/api';
+import { Binding, scheduleKey } from '@/lib/schedule';
 import { describeUrl, detectPlatform } from '@/lib/watchUrl';
 import {
   COUNTRIES,
@@ -25,6 +27,8 @@ interface Props {
   onClose: () => void;
   /** 只有新增模式給：切換到批次加入，可帶預先填好的內容 */
   onBulk?: (prefillText?: string) => void;
+  /** 這筆已綁定的播出排程，只有編輯模式會有 */
+  binding?: Binding;
 }
 
 const blank = (): NewMediaItem => ({
@@ -56,6 +60,7 @@ export default function ItemForm({
   onSubmit,
   onClose,
   onBulk,
+  binding,
 }: Props) {
   const [form, setForm] = useState<NewMediaItem>(() => {
     if (!initial) {
@@ -193,6 +198,21 @@ export default function ItemForm({
             autoFocus
           />
         </div>
+
+        {initial && (
+          <div>
+            <Label>播出排程</Label>
+            <p className="mb-1.5 text-[11px] leading-relaxed text-mist-shadow">
+              綁定後進度分母改用「已播集數」，並顯示下一集日期 ——
+              追連載時真正想知道的是離最新一集差幾集。
+            </p>
+            <ScheduleBinder
+              itemKey={scheduleKey({ title: initial.title, watchUrl: initial.watchUrl })}
+              title={initial.title}
+              binding={binding}
+            />
+          </div>
+        )}
 
         <div>
           <Label>觀看連結</Label>
