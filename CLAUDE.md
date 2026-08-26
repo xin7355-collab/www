@@ -106,6 +106,21 @@ Browser (Next.js static export)  ──►  Google Apps Script  ──►  Googl
 - `viewportFit: 'cover'` 搭配 `globals.css` 的 `env(safe-area-inset-*)`；
   `Modal.tsx` 因為是 `fixed` 定位脫離 body padding，安全區要自己處理
 
+### 後端不只是資料庫
+
+`apps-script-code.gs` 還負責兩件**只有伺服器做得到**的事，因為瀏覽器不允許跨域：
+
+- `action=fetchMeta&url=` —— 抓對方網頁的標題／封面／總集數。
+  優先走官方端點（BiliBili 的 pgc / x-web-interface、YouTube 與 Vimeo 的 oEmbed），
+  都對不上才退回抓 HTML 讀 `og:`。標題清洗只砍**認得出來的站名**，
+  不要改成砍分隔符號後面的東西 —— 作品名本身就會含 `-` 或 `:`
+- `action=search&q=&kind=` —— 查作品資料。來源是 Apple iTunes、Bangumi、
+  Google Books，**都不需要 API key**，換成需要金鑰的來源等於把設定成本轉嫁給使用者
+
+**這兩個 action 是後加的，舊部署不認得**。GAS 的 `doGet` 對未知 action 會
+掉進「讀取分頁」的預設分支回一個二維陣列 —— `src/lib/api.ts` 兩處都特別偵測
+這個情況並提示要重新部署，加新 action 時記得比照辦理。
+
 ### 播放器
 
 - 直鏈的 `.m3u8` **只有 Safari 原生播得動**，其餘瀏覽器靠 `hls.js`。
@@ -114,6 +129,8 @@ Browser (Next.js static export)  ──►  Google Apps Script  ──►  Googl
   所以動態載入的 chunk 不會被預先下載 —— 串流播放本來就需要網路，
   預快取它對離線沒有幫助，只是白吃流量。加新的動態 import 時不必特別處理
 - 播放期間請求 Wake Lock（螢幕不休眠），暫停時放掉
+- Media Session API 提供鎖定畫面控制與 Android 的背景音訊。
+  iOS 螢幕鎖定必定暫停 `<video>`，內嵌 iframe 的播放器也碰不到 —— 這兩個不是 bug
 - 鍵盤快捷鍵綁在播放器與全站兩層，**輸入框聚焦時兩邊都要讓開**，
   否則打字會變成亂按播放器
 
