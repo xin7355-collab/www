@@ -15,6 +15,7 @@ import SiteShortcuts from '@/components/SiteShortcuts';
 import { useAccounts } from '@/hooks/useAccounts';
 import { useLibrary } from '@/hooks/useLibrary';
 import { useSettings } from '@/hooks/useSettings';
+import { historyKey, indexHistory, useHistory } from '@/lib/history';
 import { clearShared, useSharedInput } from '@/lib/quickAdd';
 import { useShortcuts } from '@/lib/shortcuts';
 import { resolveWatch } from '@/lib/watchUrl';
@@ -45,6 +46,11 @@ export default function Home() {
   const library = useLibrary(accounts.isLoggedIn ? accounts.currentAccount : '');
   const shortcuts = useShortcuts();
   const shared = useSharedInput();
+  const history = useHistory();
+
+  // 「現在」只取一次：Date.now 是不純函式，寫在 render 裡會被 React Compiler 擋下，
+  // 而且每張卡各自呼叫也沒意義 —— 同一次渲染本來就該用同一個時間基準
+  const [now] = useState(() => Date.now());
   const [dialog, setDialog] = useState<Dialog>({ kind: 'none' });
 
   const close = () => {
@@ -171,6 +177,20 @@ export default function Home() {
     if (ok) close();
   };
 
+  const watched = indexHistory(history);
+
+  /**
+   * 繼續觀看：依觀看時間排序的最近幾部，只在「全部」分類且沒有其他篩選時出現 ——
+   * 使用者正在找特定東西的時候，上面多一排無關的卡片只會擋路。
+   */
+  const resumeList =
+    library.tab === '全部' && library.statusFilter === '全部' && !library.search.trim()
+      ? history
+          .map((entry) => library.items.find((it) => historyKey(it) === entry.key))
+          .filter((it): it is MediaItem => Boolean(it) && it!.status !== '已完成')
+          .slice(0, 6)
+      : [];
+
   // 各分類的筆數，給 FilterBar 顯示
   const counts: Record<string, number> = { 全部: library.items.length };
   for (const it of library.items) {
@@ -272,6 +292,28 @@ export default function Home() {
         </div>
       )}
 
+      {resumeList.length > 0 && !library.loading && (
+        <section className="mt-5">
+          <h2 className="mb-2 text-[11px] tracking-[0.2em] text-mist-shadow">繼續觀看</h2>
+          <div className="custom-scrollbar -mx-1 flex gap-3 overflow-x-auto px-1 pb-2">
+            {resumeList.map((item) => (
+              <div key={`resume-${item.rowNumber}`} className="w-40 shrink-0 sm:w-48">
+                <MediaCard
+                  item={item}
+                  gimyDomain={gimyDomain}
+                  history={watched.get(historyKey(item))}
+                  now={now}
+                  onPlay={handlePlay}
+                  onEdit={(it) => setDialog({ kind: 'edit', item: it })}
+                  onDelete={(it) => setDialog({ kind: 'delete', item: it })}
+                  onBump={library.bumpProgress}
+                />
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
       {/* 片庫 */}
       <section className="mt-5">
         {library.loading ? (
@@ -296,6 +338,8 @@ export default function Home() {
                 key={item.rowNumber}
                 item={item}
                 gimyDomain={gimyDomain}
+                history={watched.get(historyKey(item))}
+                now={now}
                 onPlay={handlePlay}
                 onEdit={(it) => setDialog({ kind: 'edit', item: it })}
                 onDelete={(it) => setDialog({ kind: 'delete', item: it })}

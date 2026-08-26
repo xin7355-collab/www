@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Modal from './Modal';
 import { deriveCover, ResolvedWatch } from '@/lib/watchUrl';
+import { recordWatch } from '@/lib/history';
 import { loadPosition, savePosition } from '@/hooks/useSettings';
 import { MediaItem } from '@/types/media';
 
@@ -43,6 +44,8 @@ interface DirectPlayerProps {
   cover: string;
   /** 播完自動記一集 */
   onEnded: () => void;
+  /** 定期回報看到哪，寫進觀看紀錄 */
+  onProgress: (position: number, duration: number) => void;
 }
 
 /**
@@ -53,7 +56,7 @@ interface DirectPlayerProps {
  * 2. 離開時記住播到幾秒，下次自動接續
  * 3. 播放期間請求 Wake Lock，手機不會看到一半熄螢幕
  */
-function DirectPlayer({ url, title, cover, onEnded }: DirectPlayerProps) {
+function DirectPlayer({ url, title, cover, onEnded, onProgress }: DirectPlayerProps) {
   const ref = useRef<HTMLVideoElement>(null);
 
   const [speed, setSpeed] = useState(1);
@@ -69,6 +72,11 @@ function DirectPlayer({ url, title, cover, onEnded }: DirectPlayerProps) {
   useEffect(() => {
     endedRef.current = onEnded;
   }, [onEnded]);
+
+  const progressRef = useRef(onProgress);
+  useEffect(() => {
+    progressRef.current = onProgress;
+  }, [onProgress]);
 
   // ── 影片來源：m3u8 走 hls.js，其餘直接餵給 <video>
   useEffect(() => {
@@ -105,7 +113,10 @@ function DirectPlayer({ url, title, cover, onEnded }: DirectPlayerProps) {
     if (resumeAt > 0) el.currentTime = resumeAt;
     setPipAvailable(document.pictureInPictureEnabled);
 
-    const persist = () => savePosition(url, el.currentTime);
+    const persist = () => {
+      savePosition(url, el.currentTime);
+      progressRef.current(el.currentTime, Number.isFinite(el.duration) ? el.duration : 0);
+    };
     const timer = window.setInterval(persist, 5000);
 
     const handleEnded = () => {
@@ -319,6 +330,12 @@ function DirectPlayer({ url, title, cover, onEnded }: DirectPlayerProps) {
 export default function PlayerModal({ item, watch, onClose, onBump }: Props) {
   const done = Number.parseInt(item.progress.replace(/[^\d]/g, ''), 10) || 0;
 
+  // 一開播就記一筆，內嵌播放器量不到秒數也至少留下「什麼時候看的」
+  const { title, watchUrl, progress } = item;
+  useEffect(() => {
+    recordWatch({ title, watchUrl, progress });
+  }, [title, watchUrl, progress]);
+
   return (
     <Modal
       title={item.title}
@@ -354,6 +371,9 @@ export default function PlayerModal({ item, watch, onClose, onBump }: Props) {
           title={item.title}
           cover={item.cover || deriveCover(item.watchUrl)}
           onEnded={() => onBump(item, 1)}
+          onProgress={(position, duration) =>
+            recordWatch({ title, watchUrl, progress }, position, duration)
+          }
         />
       ) : (
         <iframe

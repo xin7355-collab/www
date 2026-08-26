@@ -1,12 +1,17 @@
 'use client';
 
 import { useState } from 'react';
+import { formatAgo, formatClock, HistoryEntry } from '@/lib/history';
 import { deriveCover, resolveWatch } from '@/lib/watchUrl';
 import { MediaItem } from '@/types/media';
 
 interface Props {
   item: MediaItem;
   gimyDomain: string;
+  /** 這部的觀看紀錄，沒看過就是 undefined */
+  history?: HistoryEntry;
+  /** 由上層一次算好的「現在」，避免每張卡各自呼叫 Date.now */
+  now: number;
   onPlay: (item: MediaItem) => void;
   onEdit: (item: MediaItem) => void;
   onDelete: (item: MediaItem) => void;
@@ -23,6 +28,8 @@ const STATUS_STYLE: Record<string, string> = {
 export default function MediaCard({
   item,
   gimyDomain,
+  history,
+  now,
   onPlay,
   onEdit,
   onDelete,
@@ -41,6 +48,11 @@ export default function MediaCard({
   // 自己填的封面優先；沒填就看能不能從連結推一張出來（YouTube 等）
   const cover = item.cover || deriveCover(item.watchUrl);
   const showCover = Boolean(cover) && !coverFailed;
+
+  // 看到幾分幾秒（只有直鏈量得到）與上次觀看時間
+  const watchedRatio =
+    history && history.duration > 0 ? Math.min(1, history.position / history.duration) : 0;
+  const ago = history ? formatAgo(history.at, now) : '';
 
   return (
     <article className="star-rise group flex flex-col overflow-hidden rounded-xl border border-ink-border bg-ink-deep transition hover:border-ink-border-strong">
@@ -83,6 +95,16 @@ export default function MediaCard({
           </span>
         )}
 
+        {/* 看到哪：影片位置條，貼在封面底部 */}
+        {watchedRatio > 0 && (
+          <span className="absolute inset-x-0 bottom-0 h-1 bg-ink-black/70">
+            <span
+              className="block h-full bg-cinnabar"
+              style={{ width: `${Math.round(watchedRatio * 100)}%` }}
+            />
+          </span>
+        )}
+
         {rating > 0 && (
           <span className="absolute right-2 top-2 rounded bg-ink-black/80 px-1.5 py-0.5 text-[10px] text-moon">
             {'★'.repeat(rating)}
@@ -121,6 +143,18 @@ export default function MediaCard({
           {item.country && <span>{item.country}</span>}
           {item.platform && <span>{item.platform}</span>}
         </div>
+
+        {ago && (
+          <p className="-mt-1 text-[10px] text-mist-shadow">
+            {history && history.position > 5 ? (
+              <>
+                <span className="text-cinnabar/80">看到 {formatClock(history.position)}</span>
+                <span className="mx-1">·</span>
+              </>
+            ) : null}
+            {ago}看過
+          </p>
+        )}
 
         {/* 進度控制 */}
         <div className="mt-auto flex items-center gap-1.5">
