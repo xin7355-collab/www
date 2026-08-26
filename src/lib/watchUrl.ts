@@ -67,18 +67,18 @@ function host(...domains: string[]): RegExp {
 // 回傳 null＝「網域對得上，但這個網址抽不出可內嵌的 ID」（例如站台首頁），
 // 那就退回新分頁開啟，不會給一個一定播不出來的 iframe。
 
-function youtubeEmbed(u: URL): string | null {
-  let id: string | null = null;
-
+function youtubeId(u: URL): string | null {
   if (u.hostname === 'youtu.be') {
-    id = u.pathname.slice(1).split('/')[0] || null;
-  } else {
-    id = u.searchParams.get('v');
-    if (!id) {
-      const m = u.pathname.match(/^\/(?:embed|shorts|live|v)\/([^/?#]+)/);
-      id = m ? m[1] : null;
-    }
+    return u.pathname.slice(1).split('/')[0] || null;
   }
+  const v = u.searchParams.get('v');
+  if (v) return v;
+  const m = u.pathname.match(/^\/(?:embed|shorts|live|v)\/([^/?#]+)/);
+  return m ? m[1] : null;
+}
+
+function youtubeEmbed(u: URL): string | null {
+  const id = youtubeId(u);
   if (!id) return null;
 
   const start = u.searchParams.get('t');
@@ -304,6 +304,37 @@ export function resolveWatch(
     icon: '↗',
     hint: '外部連結 — 於新分頁開啟（不帶集數）',
   };
+}
+
+/**
+ * 從觀看連結推導一張封面圖。
+ *
+ * 只收「網址本身就算得出來」的站 —— 這些平台的縮圖網址是純字串規則，
+ * 不需要 API key、不需要跨域請求，所以靜態站也能用。
+ * 需要打 API 才拿得到縮圖的站（BiliBili、Vimeo）一律不猜，回空字串，
+ * 讓卡片退回顯示片名首字，比壞掉的圖好。
+ */
+export function deriveCover(watchUrl: string): string {
+  const u = parse((watchUrl || '').trim());
+  if (!u) return '';
+
+  if (host('youtube.com', 'youtube-nocookie.com', 'youtu.be').test(u.hostname)) {
+    const id = youtubeId(u);
+    return id ? `https://i.ytimg.com/vi/${id}/hqdefault.jpg` : '';
+  }
+
+  if (host('dailymotion.com', 'dai.ly').test(u.hostname)) {
+    const m = u.pathname.match(/^\/(?:embed\/)?video\/([a-z0-9]+)/i);
+    const id = m ? m[1] : u.hostname === 'dai.ly' ? u.pathname.slice(1).split('/')[0] : '';
+    return id ? `https://www.dailymotion.com/thumbnail/video/${id}` : '';
+  }
+
+  if (host('archive.org').test(u.hostname)) {
+    const m = u.pathname.match(/^\/(?:details|embed)\/([^/?#]+)/);
+    return m ? `https://archive.org/services/img/${m[1]}` : '';
+  }
+
+  return '';
 }
 
 /**

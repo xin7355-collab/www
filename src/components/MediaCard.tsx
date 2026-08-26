@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { resolveWatch } from '@/lib/watchUrl';
+import { deriveCover, resolveWatch } from '@/lib/watchUrl';
 import { MediaItem } from '@/types/media';
 
 interface Props {
@@ -38,7 +38,9 @@ export default function MediaCard({
   const total = Number.parseInt(item.totalEp.replace(/[^\d]/g, ''), 10) || 0;
   const percent = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 0;
 
-  const showCover = Boolean(item.cover) && !coverFailed;
+  // 自己填的封面優先；沒填就看能不能從連結推一張出來（YouTube 等）
+  const cover = item.cover || deriveCover(item.watchUrl);
+  const showCover = Boolean(cover) && !coverFailed;
 
   return (
     <article className="star-rise group flex flex-col overflow-hidden rounded-xl border border-ink-border bg-ink-deep transition hover:border-ink-border-strong">
@@ -53,7 +55,7 @@ export default function MediaCard({
           // 靜態輸出關閉了 next/image 最佳化，直接用 img 更單純
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src={item.cover}
+            src={cover}
             alt=""
             className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
             onError={() => setCoverFailed(true)}
