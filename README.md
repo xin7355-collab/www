@@ -129,7 +129,8 @@ Cloudflare 目前有 **Pages** 和 **Workers** 兩條路，儀表板會依版本
 
 如果建立畫面上寫的是「Configure your **Worker** project」、Deploy command 是
 `npx wrangler deploy`、而且**找不到 Build output directory 欄位**，那你在 Workers 流程。
-這條路靠 repo 根目錄的 [`wrangler.jsonc`](./wrangler.jsonc) 指定靜態資源目錄，照著填即可：
+這條路靠 repo 根目錄的 [`wrangler.jsonc`](./wrangler.jsonc) 指定進入點與靜態資源目錄，照著填即可
+（**想用第四步的密碼閘門就得走這條**）：
 
 | 欄位 | 值 |
 |---|---|
@@ -148,19 +149,49 @@ Cloudflare 目前有 **Pages** 和 **Workers** 兩條路，儀表板會依版本
 
 ### 第四步（重要）：把站鎖起來
 
-到這一步為止，任何知道網址的人都能打開你的片庫。要真正做到「只有自己看」：
+到這一步為止，任何知道網址的人都能打開你的片庫。**而且不只是看畫面** ——
+`NEXT_PUBLIC_APPS_SCRIPT_URL` 打包在 JS bundle 裡，抓得到 bundle 就等於拿到你試算表的讀寫權。
+所以閘門必須擋住**所有靜態檔案**，只擋 HTML 是沒有用的。
 
-**走路線 A（Pages）**：最省事，有內建開關 ——
-**Workers & Pages > 你的專案 > Settings > Enable access policy**，
-填你自己的 email 即可，Cloudflare 會自動建好對應的 Access 應用程式。
+兩種鎖法，擇一即可。
 
-**走路線 B（Workers）**，或想自己調規則：
+#### 鎖法 A：Cloudflare Access（Email 驗證碼，最正統）
+
 1. **Zero Trust > Access > Applications > Add an application > Self-hosted**
-2. Application domain 填你的站台網址
+2. Application domain 填你的站台網址（Pages 專案就選 `<專案名>` + `pages.dev`）
 3. Policy：Action 選 **Allow**，Include 選 **Emails** 並填你自己的 email
 
-設好之後，任何人打開網址都會先看到 Cloudflare 的登入頁，只有你的 email 收得到驗證碼。
+任何人打開網址都會先看到 Cloudflare 的登入頁，只有白名單 email 收得到驗證碼。
 免費方案含 50 個使用者，個人用綽綽有餘。
+
+**代價**：要先啟用 Zero Trust。Free 方案最終金額是 $0，但註冊流程仍會要求綁定付款方式。
+
+#### 鎖法 B：內建密碼閘門（不用綁卡，需走 Workers 路線）
+
+repo 內建一道密碼閘門，程式在 [`worker/gate.js`](./worker/gate.js)：
+
+- 驗證通過後發一張 **HMAC 簽章的 cookie**（30 天），簽章金鑰就是密碼本身 ——
+  改密碼等於讓所有舊 cookie 失效，不必另外管理 session
+- 密碼比對先各自雜湊再比，長度固定，不從比對耗時洩漏長度
+- **沒設 `SITE_PASSWORD` 時直接放行** —— 寧可沒鎖，也不要因為忘了設而把自己關在門外
+
+設定方式（**必須是 Workers 路線**，見下方說明）：
+
+1. 專案 **Settings > Variables and Secrets** 新增 **Secret**（不是普通變數）
+   `SITE_PASSWORD` = 你要用的密碼
+2. 重新部署一次讓它生效
+3. **用無痕視窗實測**：應該看到黑底的密碼頁，輸入正確密碼才進得去
+
+⚠️ **為什麼一定要 Workers 路線**：關鍵是 `wrangler.jsonc` 的
+`assets.run_worker_first: true` —— 它保證 Worker 跑在靜態資源**之前**。
+沒有這個保證的話，`/index.html`、`/_next/*.js` 這些「有對應檔案的路徑」會直接被送出，
+閘門只擋得到不存在的路徑，等於沒鎖。
+
+repo 裡也放了 Pages 版本的 [`functions/_middleware.js`](./functions/_middleware.js)，
+但 Pages 的靜態資源可能先於 Functions 被送出（本機模擬器實測就是如此）。
+**若你走 Pages 路線，務必用無痕視窗確認真的擋住了**；沒擋住就改走 Workers。
+
+**代價**：單一共用密碼，沒有 MFA、沒有多帳號、沒有登入紀錄。個人用夠，要正經權限控管請用鎖法 A。
 
 ### 第五步：第一次使用
 
@@ -220,5 +251,6 @@ npm run lint    # ESLint —— 本專案唯一的自動化檢查
 - **iframe 內嵌只對允許內嵌的站有效**：YouTube、BiliBili 可以；多數影音站會用 `X-Frame-Options` 擋掉，所以那些一律走新分頁開啟
 - **設定存在 localStorage**：站點網域與播放進度是 per-browser 的，換裝置要重設
 - **Apps Script URL 會被打包進 bundle**：靜態站沒有伺服器端可藏密鑰（見上方警告）。
-  第四步的 Cloudflare Access 是這一點的實質防線 —— 沒登入的人連 bundle 都下載不到
+  第四步的閘門（Access 或密碼閘門）是這一點的實質防線 —— 沒通過的人連 bundle 都下載不到。
+  但**閘門擋不到 Apps Script 本身**：那串 `/exec` 網址不經過 Cloudflare，知道的人仍可直接讀寫試算表
 - **沒有測試框架**：`npm run lint` 是唯一的自動化檢查

@@ -22,7 +22,15 @@ npm run lint    # ESLint（flat config）
 - 環境變數 `NEXT_PUBLIC_APPS_SCRIPT_URL` 設在 Cloudflare 專案的建置變數；
   本機開發放 `.env.local`
 - Node 版本由 `.nvmrc` 決定（Cloudflare Pages 預設的 Node 太舊，跑不動 Next 16）
-- 站台前面掛 Cloudflare Access，只有指定 email 能進 —— 這是「只有自己看」的實質防線
+- 站台前面要掛閘門才算「只有自己看」，兩種擇一：Cloudflare Access（Email 驗證碼，
+  但要先啟用 Zero Trust、註冊時得綁付款方式），或 repo 內建的密碼閘門
+- **密碼閘門的關鍵是 `wrangler.jsonc` 的 `assets.run_worker_first: true`**：
+  它保證 Worker 跑在靜態資源之前。少了這個保證，`/index.html`、`/_next/*.js` 這類
+  「有對應檔案的路徑」會直接被送出，閘門只擋得到不存在的路徑 —— 而 bundle 裡就有
+  `NEXT_PUBLIC_APPS_SCRIPT_URL`，等於沒鎖。**所以用密碼閘門就必須走 Workers 路線**
+  （`functions/_middleware.js` 是 Pages 版本，本機模擬器實測擋不到靜態檔，別預設它有效）
+- 閘門邏輯集中在 `worker/gate.js`，兩條路線共用。密碼放 Secret `SITE_PASSWORD`，
+  **沒設就直接放行** —— 刻意的，避免忘了設而把自己鎖在門外
 - 曾經評估過 GitHub Pages 但走不通：**私有 repo 在免費方案無法啟用 Pages**，
   `configure-pages` 會以 `Resource not accessible by integration` 失敗
 - 改完 `apps-script-code.gs` 後，**必須手動到 GAS 後台重新部署**（部署 > 管理部署 > 編輯 > 版本：全新版本），否則不生效
