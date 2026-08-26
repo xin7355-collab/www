@@ -150,6 +150,52 @@ export async function probe(): Promise<Probe> {
   }
 }
 
+// ─── 網址中繼資料 ─────────────────────────────────────────────
+
+export interface UrlMeta {
+  title: string;
+  cover: string;
+  totalEp: string;
+  platform: string;
+  mainType?: string;
+  /** 連載中的番劇最新到第幾話 */
+  latestEp?: string;
+  episodes?: { index: string; title: string; url: string }[];
+}
+
+/**
+ * 請後端去抓這個網址的名稱、封面、總集數。
+ *
+ * 為什麼繞後端：瀏覽器不允許跨域讀別人的網頁，靜態站自己做不到；
+ * Apps Script 跑在 Google 那邊，沒有這個限制。
+ */
+export async function fetchMeta(url: string): Promise<UrlMeta> {
+  const data = await get({ action: 'fetchMeta', url });
+
+  // 舊版腳本不認得這個 action，會掉進「讀取分頁」的預設分支回一個二維陣列。
+  // 不特別擋的話，使用者只會看到莫名其妙的「格式異常」。
+  if (Array.isArray(data)) {
+    throw new ApiError(
+      '後端腳本是舊版，還不會抓網址資訊。請把新版 apps-script-code.gs 貼進 Apps Script，再「部署 > 管理部署 > 編輯 > 版本：全新版本」重新發佈。',
+    );
+  }
+
+  const meta = data as Partial<UrlMeta>;
+  if (!meta || typeof meta.title !== 'string' || !meta.title) {
+    throw new ApiError('後端沒有回傳可用的標題');
+  }
+
+  return {
+    title: meta.title,
+    cover: meta.cover ?? '',
+    totalEp: meta.totalEp ?? '',
+    platform: meta.platform ?? '',
+    mainType: meta.mainType ?? '',
+    latestEp: meta.latestEp ?? '',
+    episodes: Array.isArray(meta.episodes) ? meta.episodes : [],
+  };
+}
+
 // ─── 帳號 ─────────────────────────────────────────────────────
 
 export async function fetchAccounts(): Promise<string[]> {

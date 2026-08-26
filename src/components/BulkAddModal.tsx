@@ -6,6 +6,8 @@ import { detectPlatform } from '@/lib/watchUrl';
 import { MAIN_TYPES, NewMediaItem } from '@/types/media';
 
 interface Props {
+  /** 從「自動填」帶過來的分集清單 */
+  initialText?: string;
   busy?: boolean;
   onSubmit: (items: NewMediaItem[]) => Promise<number>;
   onClose: () => void;
@@ -62,8 +64,8 @@ export function parseLines(text: string): Row[] {
     .filter((r) => r.title);
 }
 
-export default function BulkAddModal({ busy, onSubmit, onClose }: Props) {
-  const [text, setText] = useState('');
+export default function BulkAddModal({ initialText, busy, onSubmit, onClose }: Props) {
+  const [text, setText] = useState(initialText ?? '');
   const [mainType, setMainType] = useState('');
   const [status, setStatus] = useState('');
 

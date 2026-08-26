@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Modal from './Modal';
+import { fetchMeta } from '@/lib/api';
 import { describeUrl, detectPlatform } from '@/lib/watchUrl';
 import {
   COUNTRIES,
@@ -22,8 +23,8 @@ interface Props {
   busy?: boolean;
   onSubmit: (item: NewMediaItem) => void | Promise<void>;
   onClose: () => void;
-  /** 只有新增模式給：切換到批次加入 */
-  onBulk?: () => void;
+  /** 只有新增模式給：切換到批次加入，可帶預先填好的內容 */
+  onBulk?: (prefillText?: string) => void;
 }
 
 const blank = (): NewMediaItem => ({
@@ -72,6 +73,10 @@ export default function ItemForm({
     return rest;
   });
 
+  const [fetching, setFetching] = useState(false);
+  const [fetchMsg, setFetchMsg] = useState('');
+  const [episodes, setEpisodes] = useState<{ index: string; title: string; url: string }[]>([]);
+
   const set = <K extends keyof NewMediaItem>(key: K, value: NewMediaItem[K]) =>
     setForm((f) => ({ ...f, [key]: value }));
 
@@ -84,6 +89,58 @@ export default function ItemForm({
     }));
 
   const urlHint = describeUrl(form.watchUrl, gimyDomain);
+
+  /**
+   * 請後端去對方網站抓名稱、封面、總集數。
+   * **只填空欄位** —— 已經打過字的地方不覆蓋，人的輸入永遠優先。
+   */
+  const autoFill = async () => {
+    const url = form.watchUrl.trim();
+    if (!url) return;
+
+    setFetching(true);
+    setFetchMsg('');
+    try {
+      const meta = await fetchMeta(url);
+      setEpisodes(meta.episodes ?? []);
+      setForm((f) => ({
+        ...f,
+        title: f.title.trim() || meta.title,
+        cover: f.cover.trim() || meta.cover,
+        totalEp: f.totalEp.trim() || meta.totalEp,
+        platform: f.platform.trim() || meta.platform,
+        mainType: f.mainType.trim() || (meta.mainType ?? ''),
+      }));
+      const bits = [`抓到「${meta.title}」`];
+      if (meta.totalEp) bits.push(`共 ${meta.totalEp} 集`);
+      if (meta.latestEp) bits.push(`最新第 ${meta.latestEp} 話`);
+      setFetchMsg(bits.join('・'));
+    } catch (err) {
+      setEpisodes([]);
+      setFetchMsg(err instanceof Error ? err.message : '抓取失敗');
+    } finally {
+      setFetching(false);
+    }
+  };
+
+  /**
+   * 把分集攤成批次加入的內容。
+   *
+   * 預設**不**這樣做：一部番在片庫裡就是一筆，用「目前進度 / 總集數」
+   * 追就好，攤成 188 筆只會把清單洗版。這個入口是留給
+   * 「每一集其實是獨立作品」的情況（單元劇、合輯）。
+   */
+  const spillEpisodes = () => {
+    const base = form.title.trim() || '未命名';
+    onBulk?.(
+      episodes
+        .map((ep) => {
+          const name = [base, ep.index && `第 ${ep.index} 話`, ep.title].filter(Boolean).join(' ');
+          return ep.url ? `${name} | ${ep.url}` : name;
+        })
+        .join('\n'),
+    );
+  };
 
   // 舊資料可能存著不在清單裡的平台字串（或手動改過 Sheet）。
   // 不補這一個 option 的話 select 會顯示空白，一存檔就把原值洗掉。
@@ -101,7 +158,7 @@ export default function ItemForm({
         <div className="flex items-center gap-2">
           {onBulk && (
             <button
-              onClick={onBulk}
+              onClick={() => onBulk()}
               className="shrink-0 text-[11px] text-mist-shadow underline-offset-2 transition hover:text-moon hover:underline"
             >
               批次加入
@@ -137,12 +194,42 @@ export default function ItemForm({
 
         <div>
           <Label>觀看連結</Label>
-          <input
-            className="field"
-            value={form.watchUrl}
-            onChange={(e) => setWatchUrl(e.target.value)}
-            placeholder="貼上 YouTube / BiliBili / 影片直鏈 / 站點網址"
-          />
+          <div className="flex gap-2">
+            <input
+              className="field min-w-0 flex-1"
+              value={form.watchUrl}
+              onChange={(e) => setWatchUrl(e.target.value)}
+              placeholder="貼上 YouTube / BiliBili / 影片直鏈 / 站點網址"
+            />
+            <button
+              type="button"
+              onClick={autoFill}
+              disabled={!form.watchUrl.trim() || fetching}
+              className="shrink-0 rounded-lg border border-moon-soft/50 px-3 text-xs text-moon transition hover:bg-moon/10 disabled:cursor-not-allowed disabled:border-ink-border disabled:text-mist-shadow"
+              title="請後端去對方網站抓名稱、封面與總集數，只填空欄位"
+            >
+              {fetching ? '抓取中…' : '自動填'}
+            </button>
+          </div>
+          {fetchMsg && (
+            <p className="mt-1.5 whitespace-pre-wrap text-[11px] leading-relaxed text-mist-silver">
+              {fetchMsg}
+            </p>
+          )}
+          {episodes.length > 0 && onBulk && (
+            <p className="mt-1 text-[11px] leading-relaxed text-mist-shadow">
+              抓到 {episodes.length} 話的清單。一般用「總集數 + 目前進度」追就好；
+              若每一話其實是獨立作品，
+              <button
+                type="button"
+                onClick={spillEpisodes}
+                className="text-moon underline-offset-2 hover:underline"
+              >
+                改成每話各建一筆
+              </button>
+              。
+            </p>
+          )}
           {urlHint && (
             <p
               className={`mt-1.5 text-[11px] ${

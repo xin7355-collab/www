@@ -29,7 +29,7 @@ function pickRandom<T>(list: T[]): T {
 type Dialog =
   | { kind: 'none' }
   | { kind: 'add'; prefill?: { url?: string; title?: string } }
-  | { kind: 'bulk' }
+  | { kind: 'bulk'; text?: string }
   | { kind: 'edit'; item: MediaItem }
   | { kind: 'play'; item: MediaItem }
   | { kind: 'delete'; item: MediaItem }
@@ -302,12 +302,17 @@ export default function Home() {
           busy={library.busy}
           onSubmit={handleSubmit}
           onClose={close}
-          onBulk={active.kind === 'add' ? () => setDialog({ kind: 'bulk' }) : undefined}
+          onBulk={active.kind === 'add' ? (text) => setDialog({ kind: 'bulk', text }) : undefined}
         />
       )}
 
       {active.kind === 'bulk' && (
-        <BulkAddModal busy={library.busy} onSubmit={library.addMany} onClose={close} />
+        <BulkAddModal
+          initialText={active.text}
+          busy={library.busy}
+          onSubmit={library.addMany}
+          onClose={close}
+        />
       )}
 
       {active.kind === 'play' &&
