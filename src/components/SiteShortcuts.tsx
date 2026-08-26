@@ -7,6 +7,7 @@ interface Props {
   /** 目前選的分類，用來決定顯示哪些捷徑 */
   tab: string;
   onManage: () => void;
+  onBrowse: () => void;
 }
 
 /**
@@ -15,9 +16,8 @@ interface Props {
  * 分類切到「動漫」時只顯示綁動漫的捷徑（加上沒綁分類的），
  * 少一次「這個站是找動漫還是找電影」的認知成本。
  */
-export default function SiteShortcuts({ shortcuts, tab, onManage }: Props) {
+export default function SiteShortcuts({ shortcuts, tab, onManage, onBrowse }: Props) {
   const visible = shortcutsFor(shortcuts, tab);
-  if (visible.length === 0) return null;
 
   return (
     <div className="custom-scrollbar -mx-1 mt-3 flex items-center gap-1.5 overflow-x-auto px-1 pb-1">
@@ -36,11 +36,19 @@ export default function SiteShortcuts({ shortcuts, tab, onManage }: Props) {
         </a>
       ))}
       <button
-        onClick={onManage}
+        onClick={onBrowse}
         className="shrink-0 rounded-full border border-dashed border-ink-border px-2.5 py-1 text-[11px] text-mist-shadow transition hover:border-moon-soft hover:text-moon"
       >
-        編輯
+        站點目錄
       </button>
+      {visible.length > 0 && (
+        <button
+          onClick={onManage}
+          className="shrink-0 rounded-full border border-dashed border-ink-border px-2.5 py-1 text-[11px] text-mist-shadow transition hover:border-moon-soft hover:text-moon"
+        >
+          編輯
+        </button>
+      )}
     </div>
   );
 }

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Modal from './Modal';
-import { ResolvedWatch } from '@/lib/watchUrl';
+import { deriveCover, ResolvedWatch } from '@/lib/watchUrl';
 import { loadPosition, savePosition } from '@/hooks/useSettings';
 import { MediaItem } from '@/types/media';
 
@@ -38,6 +38,9 @@ function requestWakeLock(): Promise<{ release: () => Promise<void> } | null> {
 
 interface DirectPlayerProps {
   url: string;
+  /** 給鎖定畫面顯示用 */
+  title: string;
+  cover: string;
   /** 播完自動記一集 */
   onEnded: () => void;
 }
@@ -50,7 +53,7 @@ interface DirectPlayerProps {
  * 2. 離開時記住播到幾秒，下次自動接續
  * 3. 播放期間請求 Wake Lock，手機不會看到一半熄螢幕
  */
-function DirectPlayer({ url, onEnded }: DirectPlayerProps) {
+function DirectPlayer({ url, title, cover, onEnded }: DirectPlayerProps) {
   const ref = useRef<HTMLVideoElement>(null);
 
   const [speed, setSpeed] = useState(1);
@@ -177,6 +180,77 @@ function DirectPlayer({ url, onEnded }: DirectPlayerProps) {
     };
   }, [url, resumeAt]);
 
+  /**
+   * Media Session：讓系統知道「這是一段媒體播放」。
+   *
+   * 換來兩件事：鎖定畫面／通知列出現播放控制，以及 Android 上
+   * 關掉螢幕後音訊能繼續（沒有這段的話瀏覽器會直接把它當成一般網頁掐掉）。
+   *
+   * iOS 的限制不是這裡能解的：Safari 在螢幕鎖定時會暫停 <video>。
+   * 內嵌的 YouTube / BiliBili 也一樣 —— 那是對方 iframe 裡的播放器，
+   * 我們碰不到它的 media session。
+   */
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || !('mediaSession' in navigator)) return;
+
+    const ms = navigator.mediaSession;
+    if (typeof MediaMetadata !== 'undefined') {
+      ms.metadata = new MediaMetadata({
+        title,
+        artist: '我的片庫',
+        artwork: cover ? [{ src: cover, sizes: '512x512' }] : [],
+      });
+    }
+
+    const handlers: [MediaSessionAction, MediaSessionActionHandler][] = [
+      ['play', () => void el.play()],
+      ['pause', () => el.pause()],
+      ['seekbackward', (d) => { el.currentTime -= d.seekOffset || SEEK_STEP; }],
+      ['seekforward', (d) => { el.currentTime += d.seekOffset || SEEK_STEP; }],
+      ['seekto', (d) => { if (typeof d.seekTime === 'number') el.currentTime = d.seekTime; }],
+    ];
+    for (const [action, fn] of handlers) {
+      // 舊瀏覽器不認得部分 action，setActionHandler 會直接丟例外
+      try {
+        ms.setActionHandler(action, fn);
+      } catch {
+        // 這個 action 不支援就算了，其餘照常
+      }
+    }
+
+    // 讓鎖定畫面的進度條跟得上
+    const syncPosition = () => {
+      if (!Number.isFinite(el.duration) || el.duration <= 0) return;
+      try {
+        ms.setPositionState({
+          duration: el.duration,
+          position: Math.min(el.currentTime, el.duration),
+          playbackRate: el.playbackRate,
+        });
+      } catch {
+        // Safari 舊版沒有 setPositionState
+      }
+    };
+    el.addEventListener('loadedmetadata', syncPosition);
+    el.addEventListener('seeked', syncPosition);
+    const positionTimer = window.setInterval(syncPosition, 5000);
+
+    return () => {
+      window.clearInterval(positionTimer);
+      el.removeEventListener('loadedmetadata', syncPosition);
+      el.removeEventListener('seeked', syncPosition);
+      for (const [action] of handlers) {
+        try {
+          ms.setActionHandler(action, null);
+        } catch {
+          // 同上，清不掉就算了
+        }
+      }
+      ms.metadata = null;
+    };
+  }, [title, cover]);
+
   const changeSpeed = (value: number) => {
     setSpeed(value);
     if (ref.current) ref.current.playbackRate = value;
@@ -275,7 +349,12 @@ export default function PlayerModal({ item, watch, onClose, onBump }: Props) {
       }
     >
       {watch.kind === 'direct' ? (
-        <DirectPlayer url={watch.url} onEnded={() => onBump(item, 1)} />
+        <DirectPlayer
+          url={watch.url}
+          title={item.title}
+          cover={item.cover || deriveCover(item.watchUrl)}
+          onEnded={() => onBump(item, 1)}
+        />
       ) : (
         <iframe
           src={watch.embedUrl}

@@ -9,6 +9,7 @@ import LoginScreen from '@/components/LoginScreen';
 import MediaCard from '@/components/MediaCard';
 import PlayerModal from '@/components/PlayerModal';
 import SettingsModal from '@/components/SettingsModal';
+import SiteCatalogModal from '@/components/SiteCatalogModal';
 import SiteShortcuts from '@/components/SiteShortcuts';
 import { useAccounts } from '@/hooks/useAccounts';
 import { useLibrary } from '@/hooks/useLibrary';
@@ -33,7 +34,8 @@ type Dialog =
   | { kind: 'edit'; item: MediaItem }
   | { kind: 'play'; item: MediaItem }
   | { kind: 'delete'; item: MediaItem }
-  | { kind: 'settings' };
+  | { kind: 'settings' }
+  | { kind: 'sites' };
 
 export default function Home() {
   const accounts = useAccounts();
@@ -244,6 +246,7 @@ export default function Home() {
         shortcuts={shortcuts}
         tab={library.tab}
         onManage={() => setDialog({ kind: 'settings' })}
+        onBrowse={() => setDialog({ kind: 'sites' })}
       />
 
       {library.error && (
@@ -339,6 +342,10 @@ export default function Home() {
           onConfirm={() => library.removeItem(active.item.rowNumber)}
           onClose={close}
         />
+      )}
+
+      {active.kind === 'sites' && (
+        <SiteCatalogModal shortcuts={shortcuts} onClose={close} />
       )}
 
       {active.kind === 'settings' && (
