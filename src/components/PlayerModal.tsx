@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Modal from './Modal';
 import { ResolvedWatch } from '@/lib/watchUrl';
 import { loadPosition, savePosition } from '@/hooks/useSettings';
@@ -13,35 +13,232 @@ interface Props {
   onBump: (item: MediaItem, delta: number) => void;
 }
 
-/** 直鏈影片播放器：離開時記住播到幾秒，下次自動接續 */
-function DirectPlayer({ url }: { url: string }) {
+const SPEEDS = [0.75, 1, 1.25, 1.5, 2];
+const SEEK_STEP = 10;
+
+const isHls = (url: string) => /\.m3u8(\?|#|$)/i.test(url);
+
+function formatTime(seconds: number): string {
+  const s = Math.max(0, Math.floor(seconds));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return h > 0 ? `${h}:${pad(m)}:${pad(sec)}` : `${m}:${pad(sec)}`;
+}
+
+/** 螢幕不休眠 —— 手機橫躺看片時最實際的一個改善 */
+function requestWakeLock(): Promise<{ release: () => Promise<void> } | null> {
+  const nav = navigator as Navigator & {
+    wakeLock?: { request: (type: 'screen') => Promise<{ release: () => Promise<void> }> };
+  };
+  if (!nav.wakeLock) return Promise.resolve(null);
+  return nav.wakeLock.request('screen').catch(() => null);
+}
+
+interface DirectPlayerProps {
+  url: string;
+  /** 播完自動記一集 */
+  onEnded: () => void;
+}
+
+/**
+ * 直鏈影片播放器。
+ *
+ * 三件原生 <video> 不會自己做的事：
+ * 1. m3u8 只有 Safari 原生播得動，其他瀏覽器要掛 hls.js（動態載入，不播串流就不下載）
+ * 2. 離開時記住播到幾秒，下次自動接續
+ * 3. 播放期間請求 Wake Lock，手機不會看到一半熄螢幕
+ */
+function DirectPlayer({ url, onEnded }: DirectPlayerProps) {
   const ref = useRef<HTMLVideoElement>(null);
 
+  const [speed, setSpeed] = useState(1);
+  const [pipAvailable, setPipAvailable] = useState(false);
+
+  // 開啟當下的續播點，只取一次。這個元件只在使用者點開播之後才渲染，
+  // 不會在預渲染階段跑到，所以讀 localStorage 不會有 hydration 問題。
+  const [resumeAt] = useState(() => loadPosition(url));
+
+  // 播完的回呼每次 render 都是新的函式；用 ref 轉一手，
+  // 才不會讓下面那個「掛滿事件監聽」的 effect 每次 render 都拆掉重建
+  const endedRef = useRef(onEnded);
+  useEffect(() => {
+    endedRef.current = onEnded;
+  }, [onEnded]);
+
+  // ── 影片來源：m3u8 走 hls.js，其餘直接餵給 <video>
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
 
-    const resume = loadPosition(url);
-    if (resume > 0) el.currentTime = resume;
+    let destroy: (() => void) | undefined;
+    let cancelled = false;
+
+    if (!isHls(url) || el.canPlayType('application/vnd.apple.mpegurl')) {
+      el.src = url;
+    } else {
+      // 動態載入：不播 HLS 的人不必為這包 library 付下載成本
+      import('hls.js').then(({ default: Hls }) => {
+        if (cancelled || !Hls.isSupported()) return;
+        const hls = new Hls();
+        hls.loadSource(url);
+        hls.attachMedia(el);
+        destroy = () => hls.destroy();
+      });
+    }
+
+    return () => {
+      cancelled = true;
+      destroy?.();
+    };
+  }, [url]);
+
+  // ── 續播、進度保存、播完 +1、螢幕不休眠、鍵盤操作
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+
+    if (resumeAt > 0) el.currentTime = resumeAt;
+    setPipAvailable(document.pictureInPictureEnabled);
 
     const persist = () => savePosition(url, el.currentTime);
     const timer = window.setInterval(persist, 5000);
 
+    const handleEnded = () => {
+      savePosition(url, 0); // 看完了就不要再接續到片尾
+      endedRef.current();
+    };
+    el.addEventListener('ended', handleEnded);
+
+    let lock: { release: () => Promise<void> } | null = null;
+    const acquire = () => {
+      requestWakeLock().then((l) => {
+        lock = l;
+      });
+    };
+    const release = () => {
+      lock?.release().catch(() => {});
+      lock = null;
+    };
+    el.addEventListener('play', acquire);
+    el.addEventListener('pause', release);
+
+    const onKey = (e: KeyboardEvent) => {
+      // 打字時不要把空白鍵搶去當播放鍵
+      const tag = (e.target as HTMLElement | null)?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+
+      switch (e.key) {
+        case ' ':
+          e.preventDefault();
+          if (el.paused) el.play();
+          else el.pause();
+          break;
+        case 'ArrowRight':
+          e.preventDefault();
+          el.currentTime += SEEK_STEP;
+          break;
+        case 'ArrowLeft':
+          e.preventDefault();
+          el.currentTime -= SEEK_STEP;
+          break;
+        case 'ArrowUp':
+          e.preventDefault();
+          el.volume = Math.min(1, el.volume + 0.1);
+          break;
+        case 'ArrowDown':
+          e.preventDefault();
+          el.volume = Math.max(0, el.volume - 0.1);
+          break;
+        case 'm':
+        case 'M':
+          el.muted = !el.muted;
+          break;
+        case 'f':
+        case 'F':
+          if (document.fullscreenElement) document.exitFullscreen();
+          else el.requestFullscreen().catch(() => {});
+          break;
+        default:
+          break;
+      }
+    };
+    window.addEventListener('keydown', onKey);
+
     return () => {
       window.clearInterval(timer);
       persist();
+      el.removeEventListener('ended', handleEnded);
+      el.removeEventListener('play', acquire);
+      el.removeEventListener('pause', release);
+      window.removeEventListener('keydown', onKey);
+      release();
     };
-  }, [url]);
+  }, [url, resumeAt]);
+
+  const changeSpeed = (value: number) => {
+    setSpeed(value);
+    if (ref.current) ref.current.playbackRate = value;
+  };
+
+  const enterPip = () => {
+    ref.current?.requestPictureInPicture().catch(() => {});
+  };
+
+  const restart = () => {
+    if (!ref.current) return;
+    ref.current.currentTime = 0;
+    ref.current.play();
+  };
 
   return (
-    <video
-      ref={ref}
-      src={url}
-      controls
-      autoPlay
-      playsInline
-      className="aspect-video w-full rounded-lg bg-black"
-    />
+    <div>
+      <video
+        ref={ref}
+        controls
+        autoPlay
+        playsInline
+        className="aspect-video w-full rounded-lg bg-black"
+      />
+
+      <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-mist-shadow">
+        {resumeAt > 0 && (
+          <>
+            <span className="text-mist-silver">從 {formatTime(resumeAt)} 接續</span>
+            <button onClick={restart} className="text-mist-shadow underline-offset-2 hover:text-moon hover:underline">
+              從頭播放
+            </button>
+            <span className="text-ink-border-strong">·</span>
+          </>
+        )}
+
+        <label className="flex items-center gap-1">
+          倍速
+          <select
+            value={speed}
+            onChange={(e) => changeSpeed(Number(e.target.value))}
+            className="rounded border border-ink-border bg-ink-black px-1 py-0.5 text-[11px] text-mist-silver"
+          >
+            {SPEEDS.map((s) => (
+              <option key={s} value={s}>
+                {s}×
+              </option>
+            ))}
+          </select>
+        </label>
+
+        {pipAvailable && (
+          <button onClick={enterPip} className="hover:text-moon">
+            子母畫面
+          </button>
+        )}
+
+        <span className="ml-auto hidden sm:inline">
+          空白鍵 播放/暫停 ・ ← → 快轉 {SEEK_STEP} 秒 ・ ↑ ↓ 音量 ・ F 全螢幕 ・ M 靜音
+        </span>
+      </div>
+    </div>
   );
 }
 
@@ -78,7 +275,7 @@ export default function PlayerModal({ item, watch, onClose, onBump }: Props) {
       }
     >
       {watch.kind === 'direct' ? (
-        <DirectPlayer url={watch.url} />
+        <DirectPlayer url={watch.url} onEnded={() => onBump(item, 1)} />
       ) : (
         <iframe
           src={watch.embedUrl}

@@ -30,13 +30,28 @@ const files = walk(OUT);
 
 const toUrl = (file) => '/' + relative(OUT, file).split(sep).join(posix.sep);
 
-// 要離線可用的東西：app shell、PWA 資源，以及所有帶雜湊的靜態資源。
+/**
+ * HTML 真正引用到的產物 —— 這些是「畫面能不能長出來」的必要條件。
+ *
+ * 動態 import 進來的東西（例如只有播 HLS 串流才需要的 hls.js）不會出現在
+ * 這裡，也就不會被預快取。那是刻意的：那包快 600KB，而且串流播放本來就
+ * 需要網路，預先下載它對離線一點幫助也沒有，只是白吃手機流量。
+ * 真的用到時 SW 的 cache-first 會把它收進快取，第二次就有了。
+ */
+const referenced = new Set();
+for (const file of files.filter((f) => f.endsWith('.html'))) {
+  for (const m of readFileSync(file, 'utf8').matchAll(/\/_next\/static\/[\w./-]+/g)) {
+    referenced.add(m[0]);
+  }
+}
+
+// 要離線可用的東西：app shell、PWA 資源，以及 HTML 引用到的靜態資源。
 // 刻意排除 sw.js 自己（不能快取自己）與 .txt 的 RSC payload（單頁站用不到）。
 const precache = files
   .map(toUrl)
   .filter((url) => {
     if (url === '/sw.js') return false;
-    if (url.startsWith('/_next/static/')) return !url.endsWith('.map');
+    if (url.startsWith('/_next/static/')) return !url.endsWith('.map') && referenced.has(url);
     return ['/index.html', '/404.html', '/manifest.webmanifest'].includes(url) ||
       /^\/(icon|apple-touch-icon)[\w.-]*\.(png|svg)$/.test(url);
   })
