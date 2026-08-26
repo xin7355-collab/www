@@ -115,7 +115,9 @@ Browser (Next.js static export)  ──►  Google Apps Script  ──►  Googl
   都對不上才退回抓 HTML 讀 `og:`。標題清洗只砍**認得出來的站名**，
   不要改成砍分隔符號後面的東西 —— 作品名本身就會含 `-` 或 `:`
 - `action=search&q=&kind=` —— 查作品資料。來源是 Apple iTunes、Bangumi、
-  Google Books，**都不需要 API key**，換成需要金鑰的來源等於把設定成本轉嫁給使用者
+  Google Books，**都不需要 API key**，換成需要金鑰的來源等於把設定成本轉嫁給使用者。
+  **但前端只吃它的 Apple 那份** —— Bangumi CORS 全開，瀏覽器直接打
+  （`src/lib/bangumi.ts`）比繞後端少一個故障點，也不必為了改搜尋而重新部署
 
 **這兩個 action 是後加的，舊部署不認得**。GAS 的 `doGet` 對未知 action 會
 掉進「讀取分頁」的預設分支回一個二維陣列 —— `src/lib/api.ts` 兩處都特別偵測
@@ -142,6 +144,20 @@ Browser (Next.js static export)  ──►  Google Apps Script  ──►  Googl
 - `manifest.ts` 必須保留 `export const dynamic = 'force-static'`
 - 所有金鑰一律走 `NEXT_PUBLIC_` 打包進 bundle，沒有伺服器端可藏（設計取捨，非 bug）
 
+### 搜尋
+
+- **Bangumi 走瀏覽器直打，iTunes 走後端** —— 差別在 CORS：Bangumi 全開，
+  iTunes 不給標頭。加新來源前先確認它給不給 CORS，決定放哪一邊
+- 送出前必須 `toSimplified()`：Bangumi 是簡體站，繁體關鍵字碰到字形差異大的字
+  （鑽/钻、靈/灵）會完全搜不到
+- `src/lib/t2s.ts` 的對照表含 BMP 外的 4 byte 字，**不可以用 `indexOf` 去索引**
+  另一串 —— 那是 UTF-16 code unit 位置，surrogate pair 分布不同會整串錯位
+  （實測「鑽石王牌」變成「锅石王牌」）。已改成先 `Array.from` 切字元再建表
+- Bangumi 的相關度排序會把廣播劇、畫集排在本篇前面，所以再依
+  「動畫 → 劇集 → 書籍」分層，同層維持原名次
+- 兩條路用 `Promise.allSettled`：舊版 GAS 不認得 `search` 必定失敗，
+  但那不該把 Bangumi 的結果一起拖死
+
 ### 狀態同步模式
 
 `useLibrary` 用「本地樂觀更新 + 背景 POST」：`patchItem`、`bumpProgress`、`removeItem`
@@ -149,6 +165,14 @@ Browser (Next.js static export)  ──►  Google Apps Script  ──►  Googl
 新增項目例外 —— 需要後端回傳 `rowNumber` 才能定位，所以是 POST 成功後才插入本地清單。
 
 `removeItem` 刪除後會把後面所有項目的 `rowNumber` 減一，因為 Sheet 刪列會讓後續列號往前移。
+
+**進度加減有 1.2 秒的 debounce**（`useLibrary` 的 `queuePatch`）：連按五下只送最後一次，
+畫面照樣立刻更新。分頁關閉時用 `navigator.sendBeacon` 補送還沒出去的那筆 ——
+一般 fetch 會隨頁面卸載被中斷。表單的「儲存」不走這條，那是明確的存檔動作，要立刻送。
+
+**觀看紀錄**（`src/lib/history.ts`）與 `useSettings` 的 `pos.{url}` 分工不同，兩者都留著：
+前者是「這部作品什麼時候看的」（鍵是名稱＋連結，因為 rowNumber 會因刪列位移），
+後者是「這支影片的續播點」（鍵是網址）。
 
 ## 重點注意事項
 

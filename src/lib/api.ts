@@ -1,4 +1,6 @@
+import { searchBangumi } from './bangumi';
 import { MediaPatch, NewMediaItem } from '@/types/media';
+import { SearchResult } from '@/types/search';
 
 const URL_BASE = process.env.NEXT_PUBLIC_APPS_SCRIPT_URL || '';
 
@@ -198,23 +200,49 @@ export async function fetchMeta(url: string): Promise<UrlMeta> {
 
 // ─── 作品搜尋 ─────────────────────────────────────────────────
 
-export interface SearchResult {
-  title: string;
-  subtitle: string;
-  cover: string;
-  totalEp: string;
-  mainType: string;
-  country: string;
-  /** 資料來源的頁面，不是觀看連結 */
-  url: string;
-  source: string;
-}
-
 /**
  * 在片庫裡直接查作品資料，不必先跑去別的網站。
- * 後端問的是不需要 API key 的公開來源（Apple / Bangumi / Google Books）。
+ *
+ * 兩條路併行，因為兩邊的限制不同：
+ * - **Bangumi 走瀏覽器直打** —— 它 CORS 全開，繞後端只是多一個故障點，
+ *   而且改一次就要重新部署。動畫、日韓歐美劇、漫畫、小說它都涵蓋
+ * - **iTunes 走後端** —— 它不給 CORS 標頭，瀏覽器讀不到回應。
+ *   歐美電影的覆蓋率比 Bangumi 好，值得留著
+ *
+ * 用 allSettled 而不是 all：舊版 Apps Script 不認得 search，
+ * 那一路必定失敗 —— 但 Bangumi 那路照樣有結果，不該被拖著一起死。
  */
 export async function searchWorks(q: string, kind: string): Promise<SearchResult[]> {
+  const keyword = q.trim();
+  if (!keyword) throw new Error('請輸入要搜尋的關鍵字');
+
+  // 只有電影與影集需要 iTunes 補；動漫漫畫小說 Bangumi 就夠了
+  const wantItunes = !kind || kind === '電影' || kind === '影集';
+
+  const [bangumi, apple] = await Promise.allSettled([
+    searchBangumi(keyword, kind),
+    wantItunes ? searchViaBackend(keyword, kind) : Promise.resolve<SearchResult[]>([]),
+  ]);
+
+  const results = [
+    ...(bangumi.status === 'fulfilled' ? bangumi.value : []),
+    ...(apple.status === 'fulfilled' ? apple.value : []),
+  ];
+
+  if (results.length > 0) return results;
+
+  // 兩邊都沒結果時，把真正的失敗原因講出來，而不是一句「查無結果」
+  const failure = [bangumi, apple].find(
+    (r): r is PromiseRejectedResult => r.status === 'rejected',
+  );
+  if (failure) {
+    throw failure.reason instanceof Error ? failure.reason : new ApiError(String(failure.reason));
+  }
+  throw new ApiError('查無結果，換個關鍵字或改用原文名稱試試');
+}
+
+/** 後端的搜尋（目前只用來補 iTunes 的電影與影集） */
+async function searchViaBackend(q: string, kind: string): Promise<SearchResult[]> {
   const data = await get({ action: 'search', q, kind });
 
   // 舊版腳本不認得 search，會掉進「讀取分頁」的預設分支回二維陣列
@@ -225,16 +253,19 @@ export async function searchWorks(q: string, kind: string): Promise<SearchResult
   }
   if (!Array.isArray(data)) throw new ApiError('搜尋結果格式異常');
 
-  return (data as Partial<SearchResult>[]).map((r) => ({
-    title: r.title ?? '',
-    subtitle: r.subtitle ?? '',
-    cover: r.cover ?? '',
-    totalEp: r.totalEp ?? '',
-    mainType: r.mainType ?? '',
-    country: r.country ?? '',
-    url: r.url ?? '',
-    source: r.source ?? '',
-  }));
+  return (data as Partial<SearchResult>[])
+    .map((r) => ({
+      title: r.title ?? '',
+      subtitle: r.subtitle ?? '',
+      cover: r.cover ?? '',
+      totalEp: r.totalEp ?? '',
+      mainType: r.mainType ?? '',
+      country: r.country ?? '',
+      url: r.url ?? '',
+      source: r.source ?? '',
+    }))
+    // 後端在不指定分類時也會問 Bangumi 與 Google Books，那兩份這裡已經有了
+    .filter((r) => r.source === 'Apple' && r.title);
 }
 
 // ─── 帳號 ─────────────────────────────────────────────────────
@@ -270,6 +301,18 @@ export async function addItem(sheet: string, item: NewMediaItem): Promise<number
 
 export const updateItem = (sheet: string, row: number, fields: MediaPatch) =>
   post({ action: 'updateItem', sheet, row, fields });
+
+/**
+ * 分頁要關了才發現還有沒送出的更新時，用 sendBeacon 補送。
+ * 一般的 fetch 會隨著頁面卸載被中斷，beacon 不會。
+ *
+ * 字串 payload 會以 text/plain 送出 —— 剛好符合 GAS 的 doPost
+ * 不接受 preflight 的限制，跟上面 post() 不設 Content-Type 是同一個理由。
+ */
+export function beaconUpdate(sheet: string, row: number, fields: MediaPatch): boolean {
+  if (!URL_BASE || typeof navigator === 'undefined' || !navigator.sendBeacon) return false;
+  return navigator.sendBeacon(URL_BASE, JSON.stringify({ action: 'updateItem', sheet, row, fields }));
+}
 
 export const deleteItem = (sheet: string, row: number) =>
   post({ action: 'deleteItem', sheet, row });

@@ -1,9 +1,12 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import * as api from '@/lib/api';
 import { sheetToItems } from '@/lib/schema';
 import { MediaItem, MediaPatch, NewMediaItem, SortKey } from '@/types/media';
+
+/** 連按進度鍵時的合併視窗 */
+const DEBOUNCE_MS = 1200;
 
 const stamp = () => {
   const d = new Date();
@@ -81,6 +84,51 @@ export function useLibrary(account: string) {
 
   // ─── 寫入 ───────────────────────────────────────────────────
 
+  /**
+   * 待送出的欄位更新。
+   *
+   * 連按 `＋` 五下不該打五次 API —— 畫面早就樂觀更新過了，後端只需要知道
+   * 最後的結果。每按一下就送一次除了浪費配額，還可能因為到達順序顛倒
+   * 讓 Sheet 停在中間的值。
+   */
+  const pending = useRef(new Map<number, { timer: number; fields: MediaPatch }>());
+
+  const flushRow = useCallback(
+    async (row: number) => {
+      const entry = pending.current.get(row);
+      if (!entry) return;
+
+      window.clearTimeout(entry.timer);
+      pending.current.delete(row);
+
+      try {
+        await api.updateItem(account, row, entry.fields);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : '更新失敗，已重新載入');
+        reload(true);
+      }
+    },
+    [account, reload],
+  );
+
+  // 分頁關閉時把還沒送出的補送掉，否則剛按的那幾下會憑空消失
+  useEffect(() => {
+    const queue = pending.current;
+    const flushAll = () => {
+      for (const [row, entry] of queue) {
+        window.clearTimeout(entry.timer);
+        api.beaconUpdate(account, row, entry.fields);
+      }
+      queue.clear();
+    };
+
+    window.addEventListener('pagehide', flushAll);
+    return () => {
+      window.removeEventListener('pagehide', flushAll);
+      flushAll();
+    };
+  }, [account]);
+
   /** 樂觀更新單筆欄位，失敗時重抓蓋回真實狀態 */
   const patchItem = async (row: number, fields: MediaPatch) => {
     setItems((prev) =>
@@ -94,11 +142,27 @@ export function useLibrary(account: string) {
     }
   };
 
+  /** 樂觀更新畫面，實際送出延後併成一次 */
+  const queuePatch = (row: number, fields: MediaPatch) => {
+    setItems((prev) =>
+      prev.map((it) => (it.rowNumber === row ? { ...it, ...fields, updatedAt: stamp() } : it)),
+    );
+
+    const queue = pending.current;
+    const entry = queue.get(row);
+    if (entry) window.clearTimeout(entry.timer);
+
+    queue.set(row, {
+      fields: { ...(entry?.fields ?? {}), ...fields },
+      timer: window.setTimeout(() => flushRow(row), DEBOUNCE_MS),
+    });
+  };
+
   const bumpProgress = (item: MediaItem, delta: number) => {
     const current = Number.parseInt(item.progress.replace(/[^\d]/g, ''), 10) || 0;
     const next = Math.max(0, current + delta);
     if (next === current) return;
-    patchItem(item.rowNumber, { progress: String(next) });
+    queuePatch(item.rowNumber, { progress: String(next) });
   };
 
   const addItem = async (item: NewMediaItem) => {

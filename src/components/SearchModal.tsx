@@ -2,8 +2,9 @@
 
 import { useState } from 'react';
 import Modal from './Modal';
-import { SearchResult, searchWorks } from '@/lib/api';
+import { searchWorks } from '@/lib/api';
 import { MAIN_TYPES, NewMediaItem } from '@/types/media';
+import { SearchResult } from '@/types/search';
 
 interface Props {
   onPick: (prefill: Partial<NewMediaItem>) => void;
