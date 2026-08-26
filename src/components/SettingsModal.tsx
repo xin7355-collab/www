@@ -3,14 +3,17 @@
 import { useState } from 'react';
 import Modal from './Modal';
 import { maskedUrl, probe, Probe } from '@/lib/api';
+import { downloadBackup, parseBackup } from '@/lib/backup';
 import { addShortcut, removeShortcut, SiteShortcut } from '@/lib/shortcuts';
 import { DEFAULT_GIMY_DOMAIN } from '@/lib/watchUrl';
-import { MAIN_TYPES } from '@/types/media';
+import { MAIN_TYPES, MediaItem, NewMediaItem } from '@/types/media';
 
 interface Props {
   gimyDomain: string;
   shortcuts: SiteShortcut[];
   account: string;
+  items: MediaItem[];
+  onImport: (items: NewMediaItem[]) => Promise<number>;
   onSave: (domain: string) => void;
   onClose: () => void;
   onLogout: () => void;
@@ -21,6 +24,8 @@ export default function SettingsModal({
   gimyDomain,
   shortcuts,
   account,
+  items,
+  onImport,
   onSave,
   onClose,
   onLogout,
@@ -34,6 +39,27 @@ export default function SettingsModal({
   const [scUrl, setScUrl] = useState('');
   const [scType, setScType] = useState('');
   const [copied, setCopied] = useState(false);
+  const [importMsg, setImportMsg] = useState('');
+
+  const handleImport = async (file: File | undefined) => {
+    if (!file) return;
+    const { items: incoming, skipped, error } = parseBackup(await file.text(), items);
+    if (error) {
+      setImportMsg(error);
+      return;
+    }
+    if (incoming.length === 0) {
+      setImportMsg(skipped ? `${skipped} 筆都已經在片庫裡了，沒有新增` : '檔案裡沒有可匯入的資料');
+      return;
+    }
+    setImportMsg(`匯入中… 共 ${incoming.length} 筆`);
+    const added = await onImport(incoming);
+    setImportMsg(
+      `匯入了 ${added} 筆${skipped ? `，略過 ${skipped} 筆重複` : ''}${
+        added < incoming.length ? '（其餘失敗，可再試一次）' : ''
+      }`,
+    );
+  };
 
   const submitShortcut = () => {
     if (!scUrl.trim()) return;
@@ -191,6 +217,33 @@ export default function SettingsModal({
           >
             {copied ? '已複製 —— 貼進新書籤的網址欄即可' : '複製書籤小工具程式碼'}
           </button>
+        </section>
+
+        <section className="border-t border-ink-border pt-5">
+          <h3 className="mb-1 text-sm text-mist">備份</h3>
+          <p className="mb-2.5 text-[11px] leading-relaxed text-mist-shadow">
+            片庫只存在一份 Google 試算表裡，誤刪就沒有第二份。
+            匯出的是純 JSON，人看得懂，也能匯進另一個帳號。
+          </p>
+          <div className="flex gap-2">
+            <button
+              onClick={() => downloadBackup(account, items)}
+              disabled={items.length === 0}
+              className="flex-1 rounded-lg border border-ink-border-strong py-2 text-xs text-mist-silver transition hover:border-moon-soft hover:text-moon disabled:opacity-40"
+            >
+              匯出 {items.length} 筆
+            </button>
+            <label className="flex-1 cursor-pointer rounded-lg border border-ink-border-strong py-2 text-center text-xs text-mist-silver transition hover:border-moon-soft hover:text-moon">
+              匯入備份
+              <input
+                type="file"
+                accept="application/json,.json"
+                className="hidden"
+                onChange={(e) => handleImport(e.target.files?.[0])}
+              />
+            </label>
+          </div>
+          {importMsg && <p className="mt-2 text-[11px] text-mist-silver">{importMsg}</p>}
         </section>
 
         <section className="border-t border-ink-border pt-5">

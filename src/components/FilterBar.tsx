@@ -62,6 +62,7 @@ export default function FilterBar({
       <div className="flex flex-wrap gap-2">
         <input
           className="field min-w-[10rem] flex-1"
+          id="library-search"
           placeholder="搜尋名稱、備註、平台…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}

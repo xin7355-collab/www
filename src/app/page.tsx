@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import BulkAddModal from '@/components/BulkAddModal';
 import ConfirmModal from '@/components/ConfirmModal';
 import FilterBar from '@/components/FilterBar';
@@ -17,6 +17,14 @@ import { clearShared, useSharedInput } from '@/lib/quickAdd';
 import { useShortcuts } from '@/lib/shortcuts';
 import { resolveWatch } from '@/lib/watchUrl';
 import { MediaItem, NewMediaItem } from '@/types/media';
+
+/**
+ * 隨機取一個。刻意定義在元件外：Math.random 是不純函式，
+ * 寫在元件內會被 React Compiler 擋下（同一次 render 可能得到不同結果）。
+ */
+function pickRandom<T>(list: T[]): T {
+  return list[Math.floor(Math.random() * list.length)];
+}
 
 type Dialog =
   | { kind: 'none' }
@@ -40,12 +48,63 @@ export default function Home() {
     clearShared();
   };
 
+  const dialogKind = dialog.kind;
+  const reload = library.reload;
+
   /**
    * 從外面帶網址進來（手機分享、書籤小工具）時直接開新增表單。
    * 刻意由 query 推導而不是在 effect 裡 setState —— 靜態輸出下那會造成
    * hydration mismatch，這個專案把該規則設成 error。
    */
   const active: Dialog = dialog.kind === 'none' && shared ? { kind: 'add', prefill: shared } : dialog;
+
+  /**
+   * 全站快捷鍵。只在沒有任何 modal 開著時生效 ——
+   * 播放器自己也綁了空白鍵與方向鍵，兩邊搶會很難用。
+   */
+  const sharedOpen = Boolean(shared);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement | null)?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (dialogKind !== 'none' || sharedOpen) return;
+
+      switch (e.key) {
+        case '/':
+          e.preventDefault();
+          document.getElementById('library-search')?.focus();
+          break;
+        case 'n':
+        case 'N':
+          setDialog({ kind: 'add' });
+          break;
+        case 'r':
+        case 'R':
+          reload();
+          break;
+        default:
+          break;
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [dialogKind, sharedOpen, reload]);
+
+  /**
+   * 隨機挑一部來看。從「目前篩選結果中還沒看完、而且有連結」的裡面抽 ——
+   * 抽到已完成或沒連結的都等於沒抽。
+   */
+  const playRandom = () => {
+    const pool = library.visible.filter(
+      (it) => it.status !== '已完成' && resolveWatch(it.watchUrl, it.progress, gimyDomain).kind !== 'none',
+    );
+    if (pool.length === 0) {
+      library.setError('目前的篩選條件下沒有可以播的作品');
+      return;
+    }
+    handlePlay(pickRandom(pool));
+  };
 
   /** 剪貼簿裡若是網址就直接帶進新增表單，省掉「開表單→貼上」兩步 */
   const addFromClipboard = async () => {
@@ -135,6 +194,14 @@ export default function Home() {
             title="重新整理"
           >
             {library.refreshing ? '…' : '↻'}
+          </button>
+          <button
+            onClick={playRandom}
+            className="h-9 w-9 rounded-lg border border-ink-border-strong text-mist-silver transition hover:border-moon-soft hover:text-moon"
+            aria-label="隨機挑一部"
+            title="隨機挑一部來看"
+          >
+            🎲
           </button>
           <button
             onClick={addFromClipboard}
@@ -273,6 +340,8 @@ export default function Home() {
         <SettingsModal
           gimyDomain={gimyDomain}
           shortcuts={shortcuts}
+          items={library.items}
+          onImport={library.addMany}
           account={accounts.currentAccount}
           onSave={saveGimyDomain}
           onClose={close}
