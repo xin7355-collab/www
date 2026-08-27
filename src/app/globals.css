@@ -28,6 +28,66 @@
 
   --background: var(--ink-black);
   --foreground: var(--mist-white);
+
+  /* 字級縮放。Tailwind 的 text-* 與間距都是 rem，所以縮放 html 的字級
+     等於整個介面一起放大，而不是只有字變大、框沒變 */
+  --font-scale: 1;
+  /* 淺色主題要把顆粒雜訊調掉，否則在亮底上會變成一層髒污 */
+  --grain-opacity: 0.4;
+}
+
+/*
+ * 主題 —— 只覆寫顏色變數，元件一律用語意名稱（text-mist、bg-ink-deep），
+ * 所以不必為了換色去改任何一支元件。
+ * 新增主題就在這裡加一個 [data-theme] 區塊，並在 appearance.ts 登記一列。
+ */
+
+/* 純黑：OLED 螢幕省電，而且深色更沉 */
+:root[data-theme="black"] {
+  --ink-black: #000000;
+  --ink-deep: #0b0b0d;
+  --ink-mist: #141417;
+}
+
+/* 深藍夜：偏冷，長時間看比較不刺眼 */
+:root[data-theme="dusk"] {
+  --ink-black: #080d16;
+  --ink-deep: #101827;
+  --ink-mist: #172033;
+  --ink-border: rgba(214, 226, 245, 0.1);
+  --ink-border-strong: rgba(214, 226, 245, 0.2);
+  --mist-white: #e6ecf5;
+  --mist-silver: #93a1b8;
+  --mist-shadow: #4f5a6e;
+}
+
+/* 羊皮紙：白天或戶外用。文字色階整組翻過來，金色也要壓深才看得清楚 */
+:root[data-theme="paper"] {
+  --ink-black: #f3efe4;
+  --ink-deep: #fffdf7;
+  --ink-mist: #e8e2d2;
+  --ink-border: rgba(58, 50, 38, 0.16);
+  --ink-border-strong: rgba(58, 50, 38, 0.3);
+
+  --mist-white: #2a251d;
+  --mist-silver: #6a6153;
+  --mist-shadow: #928979;
+
+  --moon-gold: #8a6115;
+  --moon-gold-soft: #6d4c10;
+  --moon-glow: rgba(138, 97, 21, 0.22);
+
+  --star-blue: #3a5688;
+  --star-blue-soft: #2c4269;
+  --jade: #416b4f;
+  --cinnabar: #9c2f38;
+
+  --grain-opacity: 0;
+}
+
+html {
+  /* 用百分比而不是固定 px，這樣仍然尊重瀏覽器本身的字級設定 */
+  font-size: calc(100% * var(--font-scale));
 }
 
 @theme inline {
@@ -93,7 +153,7 @@ body::after {
   position: fixed;
   inset: 0;
   background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.92  0 0 0 0 0.89  0 0 0 0 0.82  0 0 0 0.08 0'/></filter><rect width='180' height='180' filter='url(%23n)'/></svg>");
-  opacity: 0.4;
+  opacity: var(--grain-opacity);
   pointer-events: none;
   z-index: -1;
 }

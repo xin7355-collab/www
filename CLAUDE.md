@@ -75,6 +75,39 @@ Browser (Next.js static export)  ──►  Google Apps Script  ──►  Googl
    gimy 只存作品 ID，網域來自 localStorage 全域設定 —— 換網域時改一個地方即可。
    `detectPlatform()` 給表單自動填「來源平台」用，認不出來就回空字串（不猜）。
 
+### 外觀設定（主題 / 字級）
+
+- 顏色定義在 `globals.css` 的 `:root[data-theme=...]`，**元件一律用語意 token**
+  （`text-mist`、`bg-ink-deep`），所以加主題不必動任何一支元件 ——
+  加一個 `[data-theme]` 區塊，再去 `appearance.ts` 登記一列就好
+- Tailwind v4 的 `@theme inline` 是刻意的：`inline` 會保留 `var()` 參照而不是
+  在建置時解析，執行期改 `--ink-black` 才會傳導出去。**改成非 inline 就換不了主題**
+- 字級是縮放 `html` 的 `font-size`（`calc(100% * var(--font-scale))`）。
+  Tailwind 的 `text-*` 與間距都是 rem，所以整個介面一起放大，
+  不會只有字變大而框沒變。用百分比而不是固定 px，才會尊重瀏覽器本身的字級設定
+- **`layout.tsx` 有一段行內腳本在首次繪製前就套好主題**。少了它每次開站都會
+  先閃一下墨黑再跳成使用者選的主題 —— 靜態輸出沒有伺服器可以先讀 cookie，
+  只能同步讀 localStorage。那段腳本的鍵名與 `appearance.ts` 的
+  `APPEARANCE_KEYS` 必須一致
+- 淺色主題要把 `--grain-opacity` 設為 0：那層顆粒雜訊是為深底調的，
+  鋪在亮底上會變成一層髒污
+
+### 搜尋加入的流程
+
+- **按「加入」直接寫進片庫，不開表單**。十筆裡有九筆是照抄搜尋結果，
+  為了偶爾要改的那一筆每次都跳表單並不划算；要改細節從卡片的「編輯」進去
+- 單筆與批次共用同一條路（`onAdd`），批次也是**逐筆送** ——
+  `addMany` 本來就不能並行，後端每次 append 都會改變列號
+- 補查（TMDB 總集數、Internet Archive 直鏈）只在真的要加入時才做，
+  不是每筆結果都查：一次搜尋十筆，全查等於十倍的 API 呼叫
+- 結果的識別鍵是 `來源::url::標題`，**不能只用 url** ——
+  同一部作品在不同來源會給同一個來源頁，只用 url 會一起被勾選
+- **小說漫畫沒有可播的連結時退回來源頁**（`watchUrlOf`）：與其給一顆按不下去的
+  「無連結」，不如讓它至少開得到作品頁。既有資料也吃得到 ——
+  `watchUrlOf` 找不到 `watchUrl` 時會去備註裡撈第一個 http(s) 網址
+- 外開的連結**也要 `recordWatch`**，否則小說漫畫這種只能外開的永遠不會出現在
+  「繼續觀看」。沒有秒數可記（開在別的分頁量不到），但「上次看的是這部」才是重點
+
 ### 前端結構
 
 - `src/app/page.tsx` — 唯一頁面，orchestration 層。用一個 `Dialog` union 管所有 modal 狀態
@@ -208,6 +241,9 @@ Browser (Next.js static export)  ──►  Google Apps Script  ──►  Googl
   只有精簡字典會進 bundle。**改了那支 trie 必須重新跟 opencc-js 對答案**，
   比對規則差一點結果就不一樣了
 - 字典跟 hls.js 一樣是 `import()` 動態載入的，不搜尋就不會下載那包
+- 設定裡的「片庫轉繁體」是補既有資料用的（自動轉是後來才加的，在那之前存的還是簡體）。
+  **一定要先預覽再寫**：那是一次改一整批真實資料，該讓人看過改成什麼樣子；
+  而且要逐筆送，並行會被後端擋，失敗了也說不清哪幾筆成功
 - 五個來源用 `Promise.allSettled`：舊版 GAS 不認得 `search` 必定失敗，
   但那不該把其他來源的結果一起拖死。**後端那份要濾掉 `source === 'Bangumi'`**
   —— 瀏覽器自己會直打，不濾會出現兩份一樣的結果；但 Apple 與 Google Books

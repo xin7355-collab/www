@@ -53,6 +53,17 @@ export default function RootLayout({
           href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;500;700;900&family=Noto+Sans+TC:wght@300;400;500;700&family=JetBrains+Mono:wght@400;700&display=swap"
           rel="stylesheet"
         />
+        {/*
+          主題與字級要在「首次繪製之前」就套上，否則每次開站都會先閃一下
+          預設的墨黑再跳成使用者選的主題。靜態輸出沒有伺服器可以先讀 cookie，
+          所以只能用同步的行內腳本 —— 這是這類設定的標準做法。
+          鍵名與 appearance.ts 的 APPEARANCE_KEYS 必須一致。
+        */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `try{var t=localStorage.getItem('myStream.theme');if(t&&t!=='ink')document.documentElement.setAttribute('data-theme',t);var s=localStorage.getItem('myStream.fontScale');if(s)document.documentElement.style.setProperty('--font-scale',s)}catch(e){}`,
+          }}
+        />
       </head>
       <body className="antialiased">
         {children}

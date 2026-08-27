@@ -15,12 +15,13 @@ import SiteShortcuts from '@/components/SiteShortcuts';
 import { useAccounts } from '@/hooks/useAccounts';
 import { useLibrary } from '@/hooks/useLibrary';
 import { useSettings } from '@/hooks/useSettings';
-import { historyKey, indexHistory, useHistory } from '@/lib/history';
+import { useAppearance } from '@/lib/appearance';
+import { historyKey, indexHistory, recordWatch, useHistory } from '@/lib/history';
 import { needsRefresh } from '@/lib/schedule';
 import { fetchSchedule } from '@/lib/tvmaze';
 import { clearShared, useSharedInput } from '@/lib/quickAdd';
 import { useShortcuts } from '@/lib/shortcuts';
-import { resolveWatch } from '@/lib/watchUrl';
+import { resolveWatch, watchUrlOf } from '@/lib/watchUrl';
 import { MediaItem, NewMediaItem } from '@/types/media';
 
 /**
@@ -51,6 +52,8 @@ export default function Home() {
   const library = useLibrary(accounts.isLoggedIn ? accounts.currentAccount : '');
   const shortcuts = useShortcuts();
   const shared = useSharedInput();
+  // 這個 hook 同時負責把主題／字級寫到 <html>，所以一定要在這裡呼叫
+  const { theme, scale: fontScale, saveTheme, saveScale: saveFontScale } = useAppearance();
   const history = useHistory();
 
   // 「現在」只取一次：Date.now 是不純函式，寫在 render 裡會被 React Compiler 擋下，
@@ -162,7 +165,7 @@ export default function Home() {
    */
   const playRandom = () => {
     const pool = library.visible.filter(
-      (it) => it.status !== '已完成' && resolveWatch(it.watchUrl, it.progress, gimyDomain).kind !== 'none',
+      (it) => it.status !== '已完成' && resolveWatch(watchUrlOf(it), it.progress, gimyDomain).kind !== 'none',
     );
     if (pool.length === 0) {
       library.setError('目前的篩選條件下沒有可以播的作品');
@@ -213,11 +216,14 @@ export default function Home() {
 
   /** 能內嵌的就開站內播放器，其餘（gimy / 一般外站）直接開新分頁 */
   const handlePlay = (item: MediaItem) => {
-    const watch = resolveWatch(item.watchUrl, item.progress, gimyDomain);
+    const watch = resolveWatch(watchUrlOf(item), item.progress, gimyDomain);
     if (watch.kind === 'none') return;
     if (watch.inApp) {
       setDialog({ kind: 'play', item });
     } else {
+      // 外開的也要記一筆，否則小說漫畫這種只能外開的永遠不會出現在「繼續觀看」。
+      // 沒有秒數可記（開在別的分頁，量不到），但「上次看的是這部、看到第幾話」才是重點
+      recordWatch(item);
       window.open(watch.url, '_blank', 'noopener,noreferrer');
     }
   };
@@ -448,7 +454,7 @@ export default function Home() {
           return (
             <PlayerModal
               item={live}
-              watch={resolveWatch(live.watchUrl, live.progress, gimyDomain)}
+              watch={resolveWatch(watchUrlOf(live), live.progress, gimyDomain)}
               onClose={close}
               onBump={library.bumpProgress}
             />
@@ -467,11 +473,10 @@ export default function Home() {
 
       {active.kind === 'search' && (
         <SearchModal
-          onPick={(prefill) => setDialog({ kind: 'add', prefill })}
+          onAdd={library.addMany}
           onClose={close}
           youtubeKey={youtubeKey}
           tmdbKey={tmdbKey}
-          onImport={library.addMany}
           onOpenSettings={() => setDialog({ kind: 'settings' })}
         />
       )}
@@ -482,6 +487,11 @@ export default function Home() {
 
       {active.kind === 'settings' && (
         <SettingsModal
+          theme={theme}
+          onSaveTheme={saveTheme}
+          onPatch={library.patchItem}
+          fontScale={fontScale}
+          onSaveFontScale={saveFontScale}
           gimyDomain={gimyDomain}
           youtubeKey={youtubeKey}
           onSaveYoutubeKey={saveYoutubeKey}

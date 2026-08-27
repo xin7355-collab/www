@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { formatAgo, formatClock, HistoryEntry } from '@/lib/history';
 import { formatAirdate, scheduleFrom } from '@/lib/schedule';
-import { deriveCover, resolveWatch } from '@/lib/watchUrl';
+import { deriveCover, resolveWatch, watchUrlOf } from '@/lib/watchUrl';
 import { MediaItem } from '@/types/media';
 
 interface Props {
@@ -39,7 +39,7 @@ export default function MediaCard({
   const [expanded, setExpanded] = useState(false);
   const [coverFailed, setCoverFailed] = useState(false);
 
-  const watch = resolveWatch(item.watchUrl, item.progress, gimyDomain);
+  const watch = resolveWatch(watchUrlOf(item), item.progress, gimyDomain);
   const rating = Number(item.rating) || 0;
 
   const done = Number.parseInt(item.progress.replace(/[^\d]/g, ''), 10) || 0;

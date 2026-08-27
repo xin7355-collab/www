@@ -14,10 +14,8 @@ import { NewMediaItem } from '@/types/media';
 
 interface Props {
   apiKey: string;
-  /** 加入單支影片 */
-  onPick: (prefill: Partial<NewMediaItem>) => void;
-  /** 整份播放清單匯入，回傳實際成功筆數 */
-  onImport: (items: NewMediaItem[]) => Promise<number>;
+  /** 直接寫進片庫，回傳實際成功筆數。單支與整份清單共用同一條路 */
+  onAdd: (items: NewMediaItem[]) => Promise<number>;
   onOpenSettings: () => void;
 }
 
@@ -38,7 +36,7 @@ function toItem(video: YouTubeVideo): NewMediaItem {
  * 跟「搜尋作品資料」的差別：那邊查的是作品本身的名稱與集數，
  * 這裡查的是**實際能播的影片**，所以加入時連觀看連結一起帶進去。
  */
-export default function YouTubeSearch({ apiKey, onPick, onImport, onOpenSettings }: Props) {
+export default function YouTubeSearch({ apiKey, onAdd, onOpenSettings }: Props) {
   const [q, setQ] = useState('');
   const [videos, setVideos] = useState<YouTubeVideo[]>([]);
   const [tokens, setTokens] = useState<{ next?: string; prev?: string }>({});
@@ -47,6 +45,9 @@ export default function YouTubeSearch({ apiKey, onPick, onImport, onOpenSettings
   const [searched, setSearched] = useState(false);
   const [playlist, setPlaylist] = useState('');
   const [note, setNote] = useState('');
+  /** 這次搜尋已經加進片庫的影片 id，避免重複按 */
+  const [added, setAdded] = useState<string[]>([]);
+  const [adding, setAdding] = useState('');
 
   const run = async (pageToken = '') => {
     const keyword = q.trim();
@@ -54,6 +55,7 @@ export default function YouTubeSearch({ apiKey, onPick, onImport, onOpenSettings
 
     setBusy(true);
     setError('');
+    setAdded([]);
     try {
       const page = await searchVideos(apiKey, keyword, pageToken);
       setTokens({ next: page.nextPageToken, prev: page.prevPageToken });
@@ -86,8 +88,8 @@ export default function YouTubeSearch({ apiKey, onPick, onImport, onOpenSettings
         return;
       }
       setNote(`匯入 ${list.length} 支影片…`);
-      const added = await onImport(list.map(toItem));
-      setNote(added === list.length ? `匯入了 ${added} 支` : `匯入了 ${added} / ${list.length} 支，其餘失敗`);
+      const ok = await onAdd(list.map(toItem));
+      setNote(ok === list.length ? `匯入了 ${ok} 支` : `匯入了 ${ok} / ${list.length} 支，其餘失敗`);
       setPlaylist('');
     } catch (err) {
       setNote('');
@@ -181,12 +183,28 @@ export default function YouTubeSearch({ apiKey, onPick, onImport, onOpenSettings
                   </p>
                 </div>
 
-                <button
-                  onClick={() => onPick(toItem(video))}
-                  className="shrink-0 rounded-lg border border-moon-soft/50 px-3 py-1.5 text-xs text-moon transition hover:bg-moon/10"
-                >
-                  加入
-                </button>
+                {added.includes(video.id) ? (
+                  <span className="shrink-0 rounded-lg border border-jade/40 px-3 py-1.5 text-xs text-jade">
+                    ✓ 已加入
+                  </span>
+                ) : (
+                  <button
+                    onClick={async () => {
+                      setAdding(video.id);
+                      try {
+                        if ((await onAdd([toItem(video)])) > 0) {
+                          setAdded((prev) => [...prev, video.id]);
+                        }
+                      } finally {
+                        setAdding('');
+                      }
+                    }}
+                    disabled={Boolean(adding)}
+                    className="shrink-0 rounded-lg border border-moon-soft/50 px-3 py-1.5 text-xs text-moon transition hover:bg-moon/10 disabled:opacity-40"
+                  >
+                    {adding === video.id ? '加入中…' : '加入'}
+                  </button>
+                )}
               </div>
             ))}
           </div>

@@ -237,6 +237,22 @@ function parse(raw: string): URL | null {
  * @param progress 目前進度（用來推算 gimy 的下一集）
  * @param gimyDomain 全域 gimy 網域設定
  */
+/**
+ * 這筆實際要開的網址。
+ *
+ * 沒填觀看連結時退回備註裡的來源頁 —— 小說與漫畫從搜尋加進來時本來就
+ * 沒有可播的連結，只有一行「資料來源：…」。與其給一顆按不下去的
+ * 「無連結」，不如讓它至少開得到作品頁。
+ *
+ * 只認 http(s)，而且取第一個 —— 備註是自由文字，使用者可能寫了好幾個網址，
+ * 猜不出哪個才是他要的就用最前面那個。
+ */
+export function watchUrlOf(item: { watchUrl: string; note: string }): string {
+  const direct = (item.watchUrl || '').trim();
+  if (direct) return direct;
+  return item.note.match(/https?:\/\/[^\s"'<>）)]+/)?.[0] ?? '';
+}
+
 export function resolveWatch(
   watchUrl: string,
   progress: string,

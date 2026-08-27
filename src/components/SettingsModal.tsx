@@ -3,12 +3,20 @@
 import { useState } from 'react';
 import Modal from './Modal';
 import { installDailyTrigger, maskedUrl, probe, Probe, refreshSchedulesNow } from '@/lib/api';
+import { FONT_SCALES, THEMES } from '@/lib/appearance';
+import { loadConverter } from '@/lib/s2t';
 import { downloadBackup, parseBackup } from '@/lib/backup';
 import { addShortcut, removeShortcut, SiteShortcut } from '@/lib/shortcuts';
 import { DEFAULT_GIMY_DOMAIN } from '@/lib/watchUrl';
-import { MAIN_TYPES, MediaItem, NewMediaItem } from '@/types/media';
+import { MAIN_TYPES, MediaItem, MediaPatch, NewMediaItem } from '@/types/media';
 
 interface Props {
+  theme: string;
+  onSaveTheme: (value: string) => void;
+  /** 就地改一筆（片庫轉繁體用） */
+  onPatch: (row: number, fields: MediaPatch) => Promise<void>;
+  fontScale: string;
+  onSaveFontScale: (value: string) => void;
   gimyDomain: string;
   youtubeKey: string;
   onSaveYoutubeKey: (value: string) => void;
@@ -25,6 +33,11 @@ interface Props {
 }
 
 export default function SettingsModal({
+  theme,
+  onSaveTheme,
+  onPatch,
+  fontScale,
+  onSaveFontScale,
   gimyDomain,
   youtubeKey,
   onSaveYoutubeKey,
@@ -48,6 +61,10 @@ export default function SettingsModal({
   const [scType, setScType] = useState('');
   const [copied, setCopied] = useState(false);
   const [importMsg, setImportMsg] = useState('');
+  /** 片庫轉繁體：先掃出待改清單給使用者看，確認後才真的寫回去 */
+  const [convertList, setConvertList] = useState<{ row: number; from: string; to: string }[]>([]);
+  const [convertBusy, setConvertBusy] = useState(false);
+  const [convertMsg, setConvertMsg] = useState('');
   const [ytKey, setYtKey] = useState(youtubeKey);
   const [tmdb, setTmdb] = useState(tmdbKey);
   const [triggerMsg, setTriggerMsg] = useState('');
@@ -114,6 +131,44 @@ export default function SettingsModal({
       setResult(await probe());
     } finally {
       setTesting(false);
+    }
+  };
+
+  /** 掃出哪些標題會被改。不直接動手 —— 這是一次改一整批資料，該先讓人看過 */
+  const scanForSimplified = async () => {
+    setConvertBusy(true);
+    setConvertMsg('載入字典…');
+    try {
+      const convert = await loadConverter();
+      const pending = items
+        .map((it) => ({ row: it.rowNumber, from: it.title, to: convert(it.title) }))
+        .filter((c) => c.to !== c.from);
+
+      setConvertList(pending);
+      setConvertMsg(pending.length === 0 ? '片庫裡沒有簡體標題，不用轉' : '');
+    } catch (err) {
+      setConvertMsg(err instanceof Error ? err.message : '字典載入失敗');
+    } finally {
+      setConvertBusy(false);
+    }
+  };
+
+  /** 逐筆送。一次全部並行的話後端會被打爆，而且失敗了說不清哪幾筆成功 */
+  const applyConversion = async () => {
+    setConvertBusy(true);
+    let done = 0;
+    try {
+      for (const c of convertList) {
+        setConvertMsg(`轉換中… ${done + 1} / ${convertList.length}`);
+        await onPatch(c.row, { title: c.to });
+        done += 1;
+      }
+      setConvertMsg(`轉好了 ${done} 筆`);
+      setConvertList([]);
+    } catch (err) {
+      setConvertMsg(`${err instanceof Error ? err.message : '轉換中斷'}（已完成 ${done} 筆）`);
+    } finally {
+      setConvertBusy(false);
     }
   };
 
@@ -321,6 +376,99 @@ export default function SettingsModal({
           >
             {copied ? '已複製 —— 貼進新書籤的網址欄即可' : '複製書籤小工具程式碼'}
           </button>
+        </section>
+
+        <section className="border-t border-ink-border pt-5">
+          <h3 className="mb-1 text-sm text-mist">外觀</h3>
+          <p className="mb-2.5 text-[11px] leading-relaxed text-mist-shadow">
+            只影響這台裝置。手機想放大字、電腦維持原樣，兩邊互不干擾。
+          </p>
+
+          <p className="mb-1.5 text-[11px] text-mist-silver">背景</p>
+          <div className="mb-3 grid grid-cols-2 gap-1.5">
+            {THEMES.map((t) => (
+              <button
+                key={t.id}
+                onClick={() => onSaveTheme(t.id)}
+                className={`rounded-lg border px-2.5 py-2 text-left transition ${
+                  theme === t.id
+                    ? 'border-moon-soft bg-moon/10'
+                    : 'border-ink-border hover:border-moon-soft/60'
+                }`}
+              >
+                <span className={`block text-xs ${theme === t.id ? 'text-moon' : 'text-mist'}`}>
+                  {t.label}
+                </span>
+                <span className="block text-[10px] text-mist-shadow">{t.hint}</span>
+              </button>
+            ))}
+          </div>
+
+          <p className="mb-1.5 text-[11px] text-mist-silver">字體大小</p>
+          <div className="flex gap-1.5">
+            {FONT_SCALES.map((f) => (
+              <button
+                key={f.id}
+                onClick={() => onSaveFontScale(f.id)}
+                className={`flex-1 rounded-lg border py-2 text-xs transition ${
+                  fontScale === f.id
+                    ? 'border-moon-soft bg-moon/10 text-moon'
+                    : 'border-ink-border text-mist-silver hover:border-moon-soft/60'
+                }`}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+          <p className="mt-1.5 text-[10px] leading-relaxed text-mist-shadow">
+            字級會連同間距一起縮放，不會只有字變大而框沒變。
+          </p>
+        </section>
+
+        <section className="border-t border-ink-border pt-5">
+          <h3 className="mb-1 text-sm text-mist">片庫轉繁體</h3>
+          <p className="mb-2.5 text-[11px] leading-relaxed text-mist-shadow">
+            現在從搜尋加入的標題都會自動轉繁體，但<span className="text-mist-silver">在那之前加的還是簡體</span>。
+            這個按鈕把片庫裡既有的簡體標題一次補轉過來。
+            只改名稱，其他欄位不動；已經是繁體的不會被碰到。
+          </p>
+
+          {convertList.length === 0 ? (
+            <button
+              onClick={scanForSimplified}
+              disabled={convertBusy}
+              className="w-full rounded-lg border border-ink-border-strong py-2 text-xs text-mist-silver transition hover:border-moon-soft hover:text-moon disabled:opacity-40"
+            >
+              {convertBusy ? '檢查中…' : '檢查有幾筆要轉'}
+            </button>
+          ) : (
+            <>
+              <div className="mb-2 max-h-32 space-y-1 overflow-y-auto rounded-lg border border-ink-border p-2">
+                {convertList.map((c) => (
+                  <p key={c.row} className="truncate text-[11px] text-mist-silver">
+                    <span className="text-mist-shadow">{c.from}</span> → {c.to}
+                  </p>
+                ))}
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={applyConversion}
+                  disabled={convertBusy}
+                  className="flex-1 rounded-lg bg-moon py-2 text-xs font-medium text-ink-black transition hover:bg-moon-soft disabled:opacity-40"
+                >
+                  {convertBusy ? '轉換中…' : `確認轉換 ${convertList.length} 筆`}
+                </button>
+                <button
+                  onClick={() => { setConvertList([]); setConvertMsg(''); }}
+                  disabled={convertBusy}
+                  className="rounded-lg border border-ink-border-strong px-3 text-xs text-mist-silver transition hover:text-mist disabled:opacity-40"
+                >
+                  取消
+                </button>
+              </div>
+            </>
+          )}
+          {convertMsg && <p className="mt-2 text-[11px] text-mist-silver">{convertMsg}</p>}
         </section>
 
         <section className="border-t border-ink-border pt-5">
