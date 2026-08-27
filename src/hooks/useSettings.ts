@@ -6,6 +6,7 @@ import { DEFAULT_GIMY_DOMAIN } from '@/lib/watchUrl';
 
 const KEY = 'myStream.gimyDomain';
 const YT_KEY = 'myStream.youtubeKey';
+const TMDB_KEY = 'myStream.tmdbKey';
 
 /**
  * gimy 之類會換網域的站點，網域是全域設定。
@@ -29,7 +30,14 @@ export function useSettings() {
     setStored(YT_KEY, value.trim());
   }, []);
 
-  return { gimyDomain, saveGimyDomain, youtubeKey, saveYoutubeKey };
+  /** TMDB 金鑰，同樣只存在這台裝置 */
+  const tmdbKey = useStored(TMDB_KEY, '');
+
+  const saveTmdbKey = useCallback((value: string) => {
+    setStored(TMDB_KEY, value.trim());
+  }, []);
+
+  return { gimyDomain, saveGimyDomain, youtubeKey, saveYoutubeKey, tmdbKey, saveTmdbKey };
 }
 
 // ─── 播放進度（直鏈影片用）────────────────────────────────────

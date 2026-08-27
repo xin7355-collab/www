@@ -54,7 +54,8 @@ type Dialog =
 
 export default function Home() {
   const accounts = useAccounts();
-  const { gimyDomain, saveGimyDomain, youtubeKey, saveYoutubeKey } = useSettings();
+  const { gimyDomain, saveGimyDomain, youtubeKey, saveYoutubeKey, tmdbKey, saveTmdbKey } =
+    useSettings();
   const library = useLibrary(accounts.isLoggedIn ? accounts.currentAccount : '');
   const shortcuts = useShortcuts();
   const shared = useSharedInput();
@@ -447,6 +448,7 @@ export default function Home() {
           onPick={(prefill) => setDialog({ kind: 'add', prefill })}
           onClose={close}
           youtubeKey={youtubeKey}
+          tmdbKey={tmdbKey}
           onImport={library.addMany}
           onOpenSettings={() => setDialog({ kind: 'settings' })}
         />
@@ -461,6 +463,8 @@ export default function Home() {
           gimyDomain={gimyDomain}
           youtubeKey={youtubeKey}
           onSaveYoutubeKey={saveYoutubeKey}
+          tmdbKey={tmdbKey}
+          onSaveTmdbKey={saveTmdbKey}
           shortcuts={shortcuts}
           items={library.items}
           onImport={library.addMany}

@@ -1,4 +1,5 @@
 import { searchBangumi } from './bangumi';
+import { searchTmdb } from './tmdb';
 import { MediaPatch, NewMediaItem } from '@/types/media';
 import { SearchResult } from '@/types/search';
 
@@ -212,27 +213,35 @@ export async function fetchMeta(url: string): Promise<UrlMeta> {
  * 用 allSettled 而不是 all：舊版 Apps Script 不認得 search，
  * 那一路必定失敗 —— 但 Bangumi 那路照樣有結果，不該被拖著一起死。
  */
-export async function searchWorks(q: string, kind: string): Promise<SearchResult[]> {
+export async function searchWorks(
+  q: string,
+  kind: string,
+  keys: { tmdbKey?: string } = {},
+): Promise<SearchResult[]> {
   const keyword = q.trim();
   if (!keyword) throw new Error('請輸入要搜尋的關鍵字');
 
-  // 只有電影與影集需要 iTunes 補；動漫漫畫小說 Bangumi 就夠了
-  const wantItunes = !kind || kind === '電影' || kind === '影集';
+  // 電影與影集才需要 TMDB 與 iTunes；動漫漫畫小說 Bangumi 就夠了
+  const wantFilm = !kind || kind === '電影' || kind === '影集';
+  const tmdbKey = keys.tmdbKey?.trim() ?? '';
 
-  const [bangumi, apple] = await Promise.allSettled([
+  const [bangumi, tmdb, apple] = await Promise.allSettled([
     searchBangumi(keyword, kind),
-    wantItunes ? searchViaBackend(keyword, kind) : Promise.resolve<SearchResult[]>([]),
+    wantFilm && tmdbKey ? searchTmdb(tmdbKey, keyword, kind) : Promise.resolve<SearchResult[]>([]),
+    wantFilm ? searchViaBackend(keyword, kind) : Promise.resolve<SearchResult[]>([]),
   ]);
 
+  // TMDB 排在 iTunes 前面：它有正式繁中標題與海報，品質好得多
   const results = [
+    ...(tmdb.status === 'fulfilled' ? tmdb.value : []),
     ...(bangumi.status === 'fulfilled' ? bangumi.value : []),
     ...(apple.status === 'fulfilled' ? apple.value : []),
   ];
 
   if (results.length > 0) return results;
 
-  // 兩邊都沒結果時，把真正的失敗原因講出來，而不是一句「查無結果」
-  const failure = [bangumi, apple].find(
+  // 全都沒結果時，把真正的失敗原因講出來，而不是一句「查無結果」
+  const failure = [tmdb, bangumi, apple].find(
     (r): r is PromiseRejectedResult => r.status === 'rejected',
   );
   if (failure) {

@@ -12,6 +12,8 @@ interface Props {
   gimyDomain: string;
   youtubeKey: string;
   onSaveYoutubeKey: (value: string) => void;
+  tmdbKey: string;
+  onSaveTmdbKey: (value: string) => void;
   shortcuts: SiteShortcut[];
   account: string;
   items: MediaItem[];
@@ -26,6 +28,8 @@ export default function SettingsModal({
   gimyDomain,
   youtubeKey,
   onSaveYoutubeKey,
+  tmdbKey,
+  onSaveTmdbKey,
   shortcuts,
   account,
   items,
@@ -45,6 +49,7 @@ export default function SettingsModal({
   const [copied, setCopied] = useState(false);
   const [importMsg, setImportMsg] = useState('');
   const [ytKey, setYtKey] = useState(youtubeKey);
+  const [tmdb, setTmdb] = useState(tmdbKey);
 
   const handleImport = async (file: File | undefined) => {
     if (!file) return;
@@ -235,6 +240,45 @@ export default function SettingsModal({
             建立 API 金鑰，並啟用「YouTube Data API v3」。
             <span className="text-mist-silver">金鑰只存在這台裝置的瀏覽器</span>，
             不會上傳、也不在程式碼裡 —— 換裝置要各自填一次。
+          </p>
+        </section>
+
+        <section className="border-t border-ink-border pt-5">
+          <h3 className="mb-1 text-sm text-mist">
+            TMDB 金鑰（電影與影集）
+            {tmdbKey && <span className="ml-2 text-[11px] text-jade">已設定</span>}
+          </h3>
+          <p className="mb-2.5 text-[11px] leading-relaxed text-mist-shadow">
+            填了之後搜尋電影與影集會多一份 TMDB 的結果：正式繁中片名、海報、
+            總集數，還會告訴你<span className="text-mist-silver">這部在台灣哪個平台上架</span>。
+          </p>
+          <div className="flex gap-2">
+            <input
+              className="field min-w-0 flex-1 font-num"
+              type="password"
+              value={tmdb}
+              onChange={(e) => setTmdb(e.target.value)}
+              placeholder="TMDB API Key"
+              autoComplete="off"
+            />
+            <button
+              onClick={() => onSaveTmdbKey(tmdb)}
+              className="shrink-0 rounded-lg bg-moon px-4 text-sm font-medium text-ink-black transition hover:bg-moon-soft"
+            >
+              儲存
+            </button>
+          </div>
+          <p className="mt-1.5 text-[11px] leading-relaxed text-mist-shadow">
+            在{' '}
+            <a
+              href="https://www.themoviedb.org/settings/api"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-moon underline-offset-2 hover:underline"
+            >
+              themoviedb.org
+            </a>{' '}
+            免費申請（註冊後即發）。同樣只存在這台裝置。
           </p>
         </section>
 

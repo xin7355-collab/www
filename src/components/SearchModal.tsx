@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Modal from './Modal';
 import YouTubeSearch from './YouTubeSearch';
 import { searchWorks } from '@/lib/api';
+import { fetchEpisodeCount, fetchWatchProviders } from '@/lib/tmdb';
 import { MAIN_TYPES, NewMediaItem } from '@/types/media';
 import { SearchResult } from '@/types/search';
 
@@ -11,6 +12,7 @@ interface Props {
   onPick: (prefill: Partial<NewMediaItem>) => void;
   onClose: () => void;
   youtubeKey: string;
+  tmdbKey: string;
   onImport: (items: NewMediaItem[]) => Promise<number>;
   onOpenSettings: () => void;
 }
@@ -29,6 +31,7 @@ export default function SearchModal({
   onPick,
   onClose,
   youtubeKey,
+  tmdbKey,
   onImport,
   onOpenSettings,
 }: Props) {
@@ -52,7 +55,11 @@ export default function SearchModal({
     setBusy(true);
     setError('');
     try {
-      setResults(await searchWorks(keyword, kind));
+      const found = await searchWorks(keyword, kind, { tmdbKey });
+      setResults(found);
+      // 上架平台每部要各問一次，所以先把結果放上來再補 ——
+      // 不要為了這個讓整頁多等好幾秒
+      void hydrateProviders(found);
     } catch (err) {
       setResults([]);
       setError(err instanceof Error ? err.message : '搜尋失敗');
@@ -62,11 +69,49 @@ export default function SearchModal({
     }
   };
 
-  const pick = (r: SearchResult) => {
+  /** 補上台灣的上架平台。只有 TMDB 的結果查得到，失敗就當作沒有，不打擾使用者 */
+  const hydrateProviders = async (list: SearchResult[]) => {
+    if (!tmdbKey) return;
+    const targets = list.filter((r) => r.tmdbId && r.mediaType);
+    if (targets.length === 0) return;
+
+    const settled = await Promise.allSettled(
+      targets.map((r) => fetchWatchProviders(tmdbKey, r.mediaType!, r.tmdbId!)),
+    );
+
+    const byId = new Map<number, { providers: string[]; link: string }>();
+    settled.forEach((outcome, i) => {
+      if (outcome.status !== 'fulfilled' || !outcome.value) return;
+      byId.set(targets[i].tmdbId!, {
+        providers: outcome.value.flatrate,
+        link: outcome.value.link,
+      });
+    });
+    if (byId.size === 0) return;
+
+    setResults((prev) =>
+      prev.map((r) => {
+        const found = r.tmdbId ? byId.get(r.tmdbId) : undefined;
+        return found ? { ...r, providers: found.providers, providerLink: found.link } : r;
+      }),
+    );
+  };
+
+  const pick = async (r: SearchResult) => {
+    // 影集的總集數要另外問一次，所以只在真的要加入時才查，不是每筆結果都查
+    let totalEp = r.totalEp;
+    if (!totalEp && tmdbKey && r.tmdbId && r.mediaType === 'tv') {
+      try {
+        totalEp = await fetchEpisodeCount(tmdbKey, r.tmdbId);
+      } catch {
+        // 查不到就留空，使用者自己填
+      }
+    }
+
     onPick({
       title: r.title,
       cover: r.cover,
-      totalEp: r.totalEp,
+      totalEp,
       mainType: MAIN_TYPES.includes(r.mainType as (typeof MAIN_TYPES)[number]) ? r.mainType : '',
       country: r.country,
       note: r.url ? `資料來源：${r.url}` : '',
@@ -196,6 +241,31 @@ export default function SearchModal({
                       </a>
                     )}
                   </p>
+
+                  {r.providers && r.providers.length > 0 && (
+                    <p className="mt-1 flex flex-wrap items-center gap-1 text-[10px]">
+                      <span className="text-mist-shadow">台灣可看</span>
+                      {r.providers.slice(0, 4).map((name) => (
+                        <span
+                          key={name}
+                          className="rounded border border-jade/40 px-1 text-jade"
+                        >
+                          {name}
+                        </span>
+                      ))}
+                      {/* TMDB 條款要求標示 JustWatch 出處，這個連結不可以拿掉 */}
+                      {r.providerLink && (
+                        <a
+                          href={r.providerLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-mist-shadow underline-offset-2 hover:text-moon hover:underline"
+                        >
+                          JustWatch ↗
+                        </a>
+                      )}
+                    </p>
+                  )}
                 </div>
 
                 <button

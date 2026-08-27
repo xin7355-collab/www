@@ -160,6 +160,12 @@ Browser (Next.js static export)  ──►  Google Apps Script  ──►  Googl
 額度成本：search 100 單位、videos 與 playlistItems 各 1 單位（每天 10,000）。
 所以搜尋結果的長度是**第二次請求**補上的，不要為了省一次請求把它拿掉。
 
+- **TMDB 補電影與影集**：正式繁中片名、海報、總集數，還有 watch providers
+  （這部在台灣哪個平台上架）。需要免費金鑰，同樣存 localStorage。
+  **providers 的資料來自 JustWatch，TMDB 條款要求標示出處** ——
+  結果列那個 JustWatch 連結不可以拿掉
+- TMDB 有兩個「延後查」的設計，不要合併成一次抓完：上架平台是搜尋結果
+  出來後才補（每部要各問一次），總集數只在按下「加入」時才查（不是每筆都查）
 - **Bangumi 走瀏覽器直打，iTunes 走後端** —— 差別在 CORS：Bangumi 全開，
   iTunes 不給標頭。加新來源前先確認它給不給 CORS，決定放哪一邊
 - 送出前必須 `toSimplified()`：Bangumi 是簡體站，繁體關鍵字碰到字形差異大的字
