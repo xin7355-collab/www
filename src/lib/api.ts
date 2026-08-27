@@ -2,6 +2,7 @@ import { searchArchive } from './archive';
 import { searchBangumi } from './bangumi';
 import { searchMangaDex } from './mangadex';
 import { searchTmdb } from './tmdb';
+import { searchVideos, toSearchResult, withDurations } from './youtube';
 import { loadConverter } from './s2t';
 import { MediaPatch, NewMediaItem } from '@/types/media';
 import { SearchResult } from '@/types/search';
@@ -219,12 +220,13 @@ export async function fetchMeta(url: string): Promise<UrlMeta> {
 export async function searchWorks(
   q: string,
   kind: string,
-  keys: { tmdbKey?: string } = {},
+  keys: { tmdbKey?: string; youtubeKey?: string } = {},
 ): Promise<SearchResult[]> {
   const keyword = q.trim();
   if (!keyword) throw new Error('請輸入要搜尋的關鍵字');
 
   const tmdbKey = keys.tmdbKey?.trim() ?? '';
+  const youtubeKey = keys.youtubeKey?.trim() ?? '';
 
   // TMDB 只補電影與影集
   const wantFilm = !kind || kind === '電影' || kind === '影集';
@@ -237,6 +239,8 @@ export async function searchWorks(
   const wantManga = !kind || kind === '漫畫';
   // Internet Archive 的結果能拿到影片直鏈，是唯一能站內播又記進度的來源
   const wantArchive = !kind || kind === '電影';
+  // YouTube 查的是實際的影片，不是作品資料 —— 小說漫畫用不到，別白花額度
+  const wantYouTube = Boolean(youtubeKey) && kind !== '小說' && kind !== '漫畫';
 
   const settled = await Promise.allSettled([
     wantFilm && tmdbKey ? searchTmdb(tmdbKey, keyword, kind) : none(),
@@ -244,6 +248,7 @@ export async function searchWorks(
     wantManga ? searchMangaDex(keyword) : none(),
     wantArchive ? searchArchive(keyword) : none(),
     wantBackend ? searchViaBackend(keyword, kind) : none(),
+    wantYouTube ? searchYouTube(youtubeKey, keyword) : none(),
   ]);
 
   // 順序＝品質順序：TMDB 的繁中資料最完整，後端那份（iTunes / Google Books）墊底
@@ -260,6 +265,12 @@ export async function searchWorks(
 }
 
 const none = () => Promise.resolve<SearchResult[]>([]);
+
+/** 長度是第二次請求補上的（search 100 單位、videos 只要 1），不要為了省一次請求拿掉 */
+async function searchYouTube(key: string, keyword: string): Promise<SearchResult[]> {
+  const page = await searchVideos(key, keyword);
+  return (await withDurations(key, page.items)).map(toSearchResult);
+}
 
 /**
  * 各來源的中文品質不一：Bangumi 是簡體站，MangaDex 的 zh 條目多半也是簡體，

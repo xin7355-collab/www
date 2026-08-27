@@ -97,3 +97,43 @@ export const SITE_CATALOG: { group: string; sites: CatalogSite[] }[] = [
     ],
   },
 ];
+
+/**
+ * 「這本去哪裡看」—— 拿作品名去各個正版平台的搜尋頁。
+ *
+ * 為什麼需要：小說與漫畫從 Bangumi 加進來時，連結指的是**資料頁**
+ * （條目介紹、封面、集數），不是內文。點進去只會看到一個介紹頁，
+ * 對「我現在想看」完全沒幫助。
+ *
+ * 這裡不抓也不代管任何內文 —— 這個站是連結目錄，不是閱讀器。
+ * 能做的是把你帶到真的看得到的地方，找到之後把該站的網址存回觀看連結，
+ * 下次點卡片就直接到那裡。
+ */
+export interface ReadingLink {
+  label: string;
+  url: string;
+  note?: string;
+}
+
+export function readingLinks(title: string, mainType: string): ReadingLink[] {
+  const q = encodeURIComponent(title.trim());
+  if (!q) return [];
+
+  const manga: ReadingLink[] = [
+    { label: 'MangaDex', url: `https://mangadex.org/search?q=${q}`, note: '多為官方授權的翻譯' },
+    { label: 'LINE WEBTOON', url: `https://www.webtoons.com/zh-hant/search?keyword=${q}` },
+    { label: 'BOOK☆WALKER', url: `https://www.bookwalker.com.tw/search?w=${q}`, note: '購買' },
+    { label: 'Kobo', url: `https://www.kobo.com/tw/zh/search?query=${q}`, note: '購買' },
+  ];
+
+  const novel: ReadingLink[] = [
+    { label: '起點中文網', url: `https://www.qidian.com/search?kw=${q}`, note: '中文網路小說' },
+    { label: '小説家になろう', url: `https://yomou.syosetu.com/search.php?word=${q}`, note: '日文，免費' },
+    { label: 'カクヨム', url: `https://kakuyomu.jp/search?q=${q}`, note: '日文，免費' },
+    { label: 'Google 圖書', url: `https://www.google.com/search?tbm=bks&q=${q}`, note: '部分可試閱' },
+    { label: 'Kobo', url: `https://www.kobo.com/tw/zh/search?query=${q}`, note: '購買' },
+    { label: '博客來', url: `https://search.books.com.tw/search/query/key=${q}`, note: '購買' },
+  ];
+
+  return mainType === '漫畫' ? manga : mainType === '小說' ? novel : [...novel, ...manga];
+}

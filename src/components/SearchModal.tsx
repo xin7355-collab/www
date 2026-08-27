@@ -2,12 +2,12 @@
 
 import { useState } from 'react';
 import Modal from './Modal';
-import YouTubeSearch from './YouTubeSearch';
 import { searchWorks } from '@/lib/api';
 import { resolveVideoUrl } from '@/lib/archive';
 import { emptyItem } from '@/lib/schema';
 import { forgetSearch, rememberSearch, useSearchHistory } from '@/lib/searchHistory';
 import { fetchEpisodeCount, fetchWatchProviders } from '@/lib/tmdb';
+import { fetchPlaylist, parsePlaylistId, toSearchResult } from '@/lib/youtube';
 import { MAIN_TYPES, NewMediaItem } from '@/types/media';
 import { SearchResult } from '@/types/search';
 
@@ -17,7 +17,6 @@ interface Props {
   onClose: () => void;
   youtubeKey: string;
   tmdbKey: string;
-  onOpenSettings: () => void;
 }
 
 /**
@@ -30,25 +29,18 @@ const resultKey = (r: SearchResult) => `${r.source}::${r.url}::${r.title}`;
 const KINDS = ['電影', '影集', '動漫', '漫畫', '小說'] as const;
 
 /**
- * 站內搜尋作品資料。
+ * 站內搜尋。
  *
- * 後端問的是不需要 API key 的公開來源，所以查到的是**作品資料**
- * （名稱、封面、集數），不是觀看連結 —— 連結還是要你自己貼，
- * 因為每個人能看的平台不一樣。
+ * 所有來源（Bangumi、TMDB、iTunes、Google Books、MangaDex、Internet Archive、
+ * YouTube）合成同一份清單 —— **來源是後端的事，使用者只要一個搜尋框**。
+ * 結果列上的來源標籤只是讓人知道資料哪來的，不是要他選。
  */
 export default function SearchModal({
   onAdd,
   onClose,
   youtubeKey,
   tmdbKey,
-  onOpenSettings,
 }: Props) {
-  /**
-   * 兩種搜尋解決的是不同問題：
-   * 「作品資料」查的是作品本身（名稱、封面、集數），不含能播的連結；
-   * 「YouTube」查的是實際的影片，加入時連觀看連結一起帶進去。
-   */
-  const [tab, setTab] = useState<'works' | 'youtube'>('works');
   const [q, setQ] = useState('');
   const [kind, setKind] = useState('');
   const [busy, setBusy] = useState(false);
@@ -61,6 +53,7 @@ export default function SearchModal({
   const [chosen, setChosen] = useState<string[]>([]);
   const [added, setAdded] = useState<string[]>([]);
   const [note, setNote] = useState('');
+  const [playlist, setPlaylist] = useState('');
   const recent = useSearchHistory();
 
   /** @param override 從「最近搜尋」點進來的關鍵字；setQ 是非同步的，不能等它 */
@@ -76,7 +69,7 @@ export default function SearchModal({
     setAdded([]);
     rememberSearch(keyword);
     try {
-      const found = await searchWorks(keyword, kind, { tmdbKey });
+      const found = await searchWorks(keyword, kind, { tmdbKey, youtubeKey });
       setResults(found);
       // 上架平台每部要各問一次，所以先把結果放上來再補 ——
       // 不要為了這個讓整頁多等好幾秒
@@ -199,6 +192,31 @@ export default function SearchModal({
     }
   };
 
+  /** 整份 YouTube 播放清單匯入。每頁只花 1 單位額度，跟搜尋的 100 差很多 */
+  const importPlaylist = async () => {
+    const id = parsePlaylistId(playlist);
+    if (!id) {
+      setNote('看不懂這個播放清單網址，要含 ?list=… 的那種');
+      return;
+    }
+    setPicking('__batch__');
+    setNote('讀取播放清單…');
+    try {
+      const list = await fetchPlaylist(youtubeKey, id);
+      if (list.length === 0) {
+        setNote('這份清單是空的，或裡面的影片都被刪或設為私人了');
+        return;
+      }
+      const ok = await onAdd(await Promise.all(list.map((v) => buildItem(toSearchResult(v)))));
+      setNote(ok === list.length ? `匯入了 ${ok} 支` : `匯入了 ${ok} / ${list.length} 支，其餘失敗`);
+      setPlaylist('');
+    } catch (err) {
+      setNote(err instanceof Error ? err.message : '播放清單匯入失敗');
+    } finally {
+      setPicking('');
+    }
+  };
+
   const toggle = (id: string) =>
     setChosen((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
 
@@ -207,28 +225,6 @@ export default function SearchModal({
 
   return (
     <Modal title="搜尋" onClose={onClose}>
-      <div className="mb-4 flex gap-1.5">
-        {([
-          ['works', '作品資料'],
-          ['youtube', 'YouTube 影片'],
-        ] as const).map(([value, label]) => (
-          <button
-            key={value}
-            onClick={() => setTab(value)}
-            className={`rounded-full border px-3 py-1 text-xs transition ${
-              tab === value
-                ? 'border-moon-soft bg-moon/10 text-moon'
-                : 'border-ink-border text-mist-silver hover:border-moon-soft hover:text-moon'
-            }`}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-
-      {tab === 'youtube' ? (
-        <YouTubeSearch apiKey={youtubeKey} onAdd={onAdd} onOpenSettings={onOpenSettings} />
-      ) : (
       <div className="space-y-4">
         <form
           className="flex gap-2"
@@ -294,11 +290,6 @@ export default function SearchModal({
           </div>
         )}
 
-        <p className="text-[11px] leading-relaxed text-mist-shadow">
-          查到的是作品資料（名稱、封面、集數），
-          <span className="text-mist-silver">通常不含觀看連結</span> ——
-          每個人能看的平台不一樣。沒有連結的會先指到來源頁，之後可以自己換掉。
-        </p>
 
         {error && (
           <p className="rounded-lg border border-cinnabar/40 bg-cinnabar/10 px-3 py-2 text-[11px] leading-relaxed text-cinnabar">
@@ -443,8 +434,24 @@ export default function SearchModal({
             })}
           </div>
         )}
+        {youtubeKey && (
+          <div className="flex gap-2 border-t border-ink-border pt-3">
+            <input
+              className="field min-w-0 flex-1"
+              value={playlist}
+              onChange={(e) => setPlaylist(e.target.value)}
+              placeholder="貼上 YouTube 播放清單網址整份匯入"
+            />
+            <button
+              onClick={importPlaylist}
+              disabled={!playlist.trim() || Boolean(picking)}
+              className="shrink-0 rounded-lg border border-ink-border-strong px-3 text-xs text-mist-silver transition hover:border-moon-soft hover:text-moon disabled:opacity-40"
+            >
+              匯入
+            </button>
+          </div>
+        )}
       </div>
-      )}
     </Modal>
   );
 }

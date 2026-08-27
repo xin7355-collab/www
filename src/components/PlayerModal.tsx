@@ -244,7 +244,7 @@ function DirectPlayer({
     if (typeof MediaMetadata !== 'undefined') {
       ms.metadata = new MediaMetadata({
         title,
-        artist: '我的片庫',
+        artist: '墨影',
         artwork: cover ? [{ src: cover, sizes: '512x512' }] : [],
       });
     }

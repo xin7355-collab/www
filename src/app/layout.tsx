@@ -3,9 +3,9 @@ import ServiceWorkerRegistrar from '@/components/ServiceWorkerRegistrar';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: '我的片庫',
-  description: '個人影音串流平台 —— 收藏、追進度、一鍵開播',
-  applicationName: '我的片庫',
+  title: '墨影',
+  description: '收藏、追進度、一鍵開播',
+  applicationName: '墨影',
   manifest: '/manifest.webmanifest',
   icons: {
     icon: [
@@ -18,7 +18,7 @@ export const metadata: Metadata = {
   // iOS 加到主畫面後要全螢幕執行、標題不要顯示網址，靠這組設定
   appleWebApp: {
     capable: true,
-    title: '我的片庫',
+    title: '墨影',
     statusBarStyle: 'black-translucent',
   },
   formatDetection: {

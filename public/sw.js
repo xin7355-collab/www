@@ -1,5 +1,5 @@
 /**
- * 我的片庫 —— Service Worker
+ * 墨影 —— Service Worker
  *
  * 手寫而不用 next-pwa：那套已停止維護，且對 Next 16 的 app router
  * 支援不完整。這個站是純靜態輸出，快取規則簡單到不值得引入依賴。

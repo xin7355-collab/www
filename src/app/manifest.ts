@@ -4,8 +4,8 @@ export const dynamic = 'force-static';
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: '我的片庫 — 個人影音串流平台',
-    short_name: '我的片庫',
+    name: '墨影',
+    short_name: '墨影',
     description: '收藏、追進度、一鍵開播',
     start_url: '/',
     scope: '/',

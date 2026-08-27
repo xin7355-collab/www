@@ -9,6 +9,10 @@ import { MediaItem, MediaPatch, NewMediaItem, SortKey } from '@/types/media';
 /** 連按進度鍵時的合併視窗 */
 const DEBOUNCE_MS = 1200;
 
+/** 樂觀新增用的暫時列號。真實列號從 2 起算，負數不可能撞到 */
+let tempRowSeq = 0;
+const nextTempRow = () => --tempRowSeq;
+
 const stamp = () => {
   const d = new Date();
   const p = (n: number) => String(n).padStart(2, '0');
@@ -177,50 +181,71 @@ export function useLibrary(account: string) {
     queuePatch(item.rowNumber, { progress: String(next) });
   };
 
-  const addItem = async (item: NewMediaItem) => {
-    setBusy(true);
-    setError('');
-    try {
-      const rowNumber = await api.addItem(account, item);
-      const today = stamp();
-      setItems((prev) => [
-        ...prev,
-        { ...item, rowNumber, updatedAt: today, addedDate: item.addedDate || today },
-      ]);
-      return true;
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '新增失敗');
-      return false;
-    } finally {
-      setBusy(false);
-    }
-  };
-
   /**
-   * 批次新增。刻意一筆一筆送而不並行 —— 後端每次 append 都會改變列號，
-   * 並行的話回傳的 rowNumber 會互相踩到，本地清單就對不上真實列。
-   * 中途失敗就停下並回報已成功的筆數，不假裝全部成功。
+   * 樂觀新增。
+   *
+   * GAS 一個來回要一兩秒，等它回來才把卡片畫出來，按下「加入」之後畫面
+   * 會像沒反應。所以先用一個**暫時的負數列號**把卡片放上去，POST 回來
+   * 再換成真的列號。
+   *
+   * 為什麼是負數：真實列號從 2 起算，負數不可能撞到，而且卡片只要看到
+   * 負數就知道這筆還在路上，先把編輯與刪除鎖住 —— 那些操作要靠列號定位，
+   * 在真列號回來之前做會寫到別人身上。
    */
-  const addMany = async (list: NewMediaItem[]) => {
-    setBusy(true);
+  const addOptimistic = async (list: NewMediaItem[]) => {
+    if (list.length === 0) return 0;
+
     setError('');
+    setBusy(true);
+    const today = stamp();
+    const pendingRows = list.map(() => nextTempRow());
+    setItems((prev) => [
+      ...prev,
+      ...list.map((item, i) => ({
+        ...item,
+        rowNumber: pendingRows[i],
+        updatedAt: today,
+        addedDate: item.addedDate || today,
+      })),
+    ]);
+
+    // 逐筆送，不能並行 —— 後端每次 append 都會改變列號
     let added = 0;
     try {
-      for (const item of list) {
-        const rowNumber = await api.addItem(account, item);
-        const today = stamp();
-        setItems((prev) => [
-          ...prev,
-          { ...item, rowNumber, updatedAt: today, addedDate: item.addedDate || today },
-        ]);
+      for (let i = 0; i < list.length; i++) {
+        const rowNumber = await api.addItem(account, list[i]);
+        setItems((prev) =>
+          prev.map((it) => (it.rowNumber === pendingRows[i] ? { ...it, rowNumber } : it)),
+        );
         added += 1;
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : '批次新增中斷');
+      setError(err instanceof Error ? err.message : '新增失敗');
+      // 沒送成功的那幾張要收回去，否則畫面上會留著一筆後端根本沒有的資料
+      const stale = new Set(pendingRows.slice(added));
+      setItems((prev) => prev.filter((it) => !stale.has(it.rowNumber)));
     } finally {
       setBusy(false);
     }
     return added;
+  };
+
+  const addItem = async (item: NewMediaItem) => (await addOptimistic([item])) > 0;
+
+  const addMany = (list: NewMediaItem[]) => addOptimistic(list);
+
+
+  /**
+   * 批次刪除。**由大到小刪** —— Sheet 刪掉一列會讓後面每一列的列號往前移一位，
+   * 由小到大刪的話第二筆之後全部會刪到隔壁的作品。
+   */
+  const removeMany = async (rows: number[]) => {
+    let done = 0;
+    for (const row of [...rows].sort((a, b) => b - a)) {
+      await removeItem(row);
+      done += 1;
+    }
+    return done;
   };
 
   const removeItem = async (row: number) => {
@@ -299,5 +324,6 @@ export function useLibrary(account: string) {
     addItem,
     addMany,
     removeItem,
+    removeMany,
   };
 }

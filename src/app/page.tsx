@@ -9,6 +9,7 @@ import LoginScreen from '@/components/LoginScreen';
 import MediaCard from '@/components/MediaCard';
 import PlayerModal from '@/components/PlayerModal';
 import SearchModal from '@/components/SearchModal';
+import ReadingLinksModal from '@/components/ReadingLinksModal';
 import RenameModal from '@/components/RenameModal';
 import SettingsModal from '@/components/SettingsModal';
 import SiteCatalogModal from '@/components/SiteCatalogModal';
@@ -32,9 +33,6 @@ import { MediaItem, NewMediaItem } from '@/types/media';
  */
 const stamp = () => Date.now();
 
-function pickRandom<T>(list: T[]): T {
-  return list[Math.floor(Math.random() * list.length)];
-}
 
 type Dialog =
   | { kind: 'none' }
@@ -44,6 +42,8 @@ type Dialog =
   | { kind: 'play'; item: MediaItem }
   | { kind: 'delete'; item: MediaItem }
   | { kind: 'rename'; item: MediaItem }
+  | { kind: 'bulkDelete'; rows: number[] }
+  | { kind: 'whereToRead'; item: MediaItem }
   | { kind: 'settings' }
   | { kind: 'sites' }
   | { kind: 'search' };
@@ -63,6 +63,8 @@ export default function Home() {
   // 而且每張卡各自呼叫也沒意義 —— 同一次渲染本來就該用同一個時間基準
   const [now] = useState(stamp);
   const [dialog, setDialog] = useState<Dialog>({ kind: 'none' });
+  /** 批次選取：不是 null 就代表在選取模式，內容是選中的 rowNumber */
+  const [picked, setPicked] = useState<number[] | null>(null);
 
   /**
    * 排程過期就在背景重抓一次並寫回 Sheet。
@@ -162,20 +164,6 @@ export default function Home() {
     return () => window.removeEventListener('keydown', onKey);
   }, [dialogKind, sharedOpen, reload]);
 
-  /**
-   * 隨機挑一部來看。從「目前篩選結果中還沒看完、而且有連結」的裡面抽 ——
-   * 抽到已完成或沒連結的都等於沒抽。
-   */
-  const playRandom = () => {
-    const pool = library.visible.filter(
-      (it) => it.status !== '已完成' && resolveWatch(watchUrlOf(it), it.progress, gimyDomain).kind !== 'none',
-    );
-    if (pool.length === 0) {
-      library.setError('目前的篩選條件下沒有可以播的作品');
-      return;
-    }
-    handlePlay(pickRandom(pool));
-  };
 
   /** 剪貼簿裡若是網址就直接帶進新增表單，省掉「開表單→貼上」兩步 */
   const addFromClipboard = async () => {
@@ -203,7 +191,6 @@ export default function Home() {
   if (!accounts.isLoggedIn) {
     return (
       <LoginScreen
-        accounts={accounts.accounts}
         loginName={accounts.loginName}
         loginError={accounts.loginError}
         verifying={accounts.verifying}
@@ -231,14 +218,18 @@ export default function Home() {
     }
   };
 
-  const handleSubmit = async (values: NewMediaItem) => {
+  /**
+   * 表單送出後**立刻關閉**，不等後端。新增與編輯都是樂觀更新，
+   * 卡片會馬上出現／更新；等 GAS 那一兩秒只會讓人以為當掉了。
+   * 真的失敗的話 library.error 會浮出來。
+   */
+  const handleSubmit = (values: NewMediaItem) => {
     if (active.kind === 'edit') {
-      await library.patchItem(active.item.rowNumber, values);
-      close();
-      return;
+      void library.patchItem(active.item.rowNumber, values);
+    } else {
+      void library.addItem(values);
     }
-    const ok = await library.addItem(values);
-    if (ok) close();
+    close();
   };
 
   const watched = indexHistory(history);
@@ -267,13 +258,7 @@ export default function Home() {
     <main className="mx-auto max-w-7xl px-4 pb-16 pt-6 sm:px-6">
       {/* Header */}
       <header className="mb-6 flex items-start justify-between gap-4">
-        <div>
-          <h1 className="font-display text-2xl tracking-widest text-mist">我的片庫</h1>
-          <p className="mt-1 text-[11px] text-mist-shadow">
-            {accounts.currentAccount} ・ 共 {library.stats.total} 部 ・ 觀看中{' '}
-            {library.stats.watching} ・ 已完成 {library.stats.done}
-          </p>
-        </div>
+        <h1 className="font-display text-2xl tracking-widest text-mist">墨影</h1>
 
         <div className="flex shrink-0 items-center gap-1.5">
           <button
@@ -288,18 +273,10 @@ export default function Home() {
           <button
             onClick={() => setDialog({ kind: 'search' })}
             className="h-9 w-9 rounded-lg border border-ink-border-strong text-mist-silver transition hover:border-moon-soft hover:text-moon"
-            aria-label="搜尋作品資料"
-            title="搜尋作品資料（名稱、封面、集數）"
+            aria-label="搜尋"
+            title="搜尋"
           >
             🔍
-          </button>
-          <button
-            onClick={playRandom}
-            className="h-9 w-9 rounded-lg border border-ink-border-strong text-mist-silver transition hover:border-moon-soft hover:text-moon"
-            aria-label="隨機挑一部"
-            title="隨機挑一部來看"
-          >
-            🎲
           </button>
           <button
             onClick={addFromClipboard}
@@ -316,12 +293,6 @@ export default function Home() {
             title="設定"
           >
             ⚙
-          </button>
-          <button
-            onClick={() => setDialog({ kind: 'add' })}
-            className="h-9 rounded-lg bg-moon px-4 text-sm font-medium text-ink-black transition hover:bg-moon-soft"
-          >
-            ＋ 新增
           </button>
         </div>
       </header>
@@ -372,9 +343,9 @@ export default function Home() {
                   onPlay={handlePlay}
                   onEdit={(it) => setDialog({ kind: 'edit', item: it })}
                   onDelete={(it) => setDialog({ kind: 'delete', item: it })}
-                  onBump={library.bumpProgress}
                   onSetProgress={library.setProgress}
                   onFindName={(it) => setDialog({ kind: 'rename', item: it })}
+                  onWhereToRead={(it) => setDialog({ kind: 'whereToRead', item: it })}
                 />
               </div>
             ))}
@@ -395,28 +366,81 @@ export default function Home() {
             </p>
             <p className="text-xs text-mist-shadow">
               {library.items.length === 0
-                ? '點右上角「＋ 新增」加入第一部作品'
+                ? '用右上角的 🔍 搜尋，或 📋 貼上網址加入第一部'
                 : '換個分類或清空搜尋看看'}
             </p>
           </div>
         ) : (
-          <div className="grid-stagger grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-            {library.visible.map((item) => (
-              <MediaCard
-                key={item.rowNumber}
-                item={item}
-                gimyDomain={gimyDomain}
-                history={watched.get(historyKey(item))}
-                now={now}
-                onPlay={handlePlay}
-                onEdit={(it) => setDialog({ kind: 'edit', item: it })}
-                onDelete={(it) => setDialog({ kind: 'delete', item: it })}
-                onBump={library.bumpProgress}
-                onSetProgress={library.setProgress}
-                onFindName={(it) => setDialog({ kind: 'rename', item: it })}
-              />
-            ))}
-          </div>
+          <>
+            <div className="mb-2.5 flex items-center gap-2">
+              {picked === null ? (
+                <button
+                  onClick={() => setPicked([])}
+                  className="ml-auto rounded-full border border-ink-border px-2.5 py-1 text-[11px] text-mist-shadow transition hover:border-moon-soft hover:text-moon"
+                >
+                  選取
+                </button>
+              ) : (
+                <>
+                  <button
+                    onClick={() =>
+                      setPicked(
+                        picked.length === library.visible.length
+                          ? []
+                          : library.visible.map((it) => it.rowNumber),
+                      )
+                    }
+                    className="rounded-full border border-ink-border px-2.5 py-1 text-[11px] text-mist-silver transition hover:border-moon-soft hover:text-moon"
+                  >
+                    {picked.length === library.visible.length ? '取消全選' : '全選'}
+                  </button>
+                  <span className="text-[11px] text-mist-shadow">已選 {picked.length} 部</span>
+                  <button
+                    onClick={() => setPicked(null)}
+                    className="ml-auto rounded-full border border-ink-border px-2.5 py-1 text-[11px] text-mist-shadow transition hover:text-mist"
+                  >
+                    結束選取
+                  </button>
+                  <button
+                    onClick={() => setDialog({ kind: 'bulkDelete', rows: picked })}
+                    disabled={picked.length === 0}
+                    className="rounded-full border border-cinnabar/50 px-2.5 py-1 text-[11px] text-cinnabar transition hover:bg-cinnabar/10 disabled:opacity-40"
+                  >
+                    刪除 {picked.length} 部
+                  </button>
+                </>
+              )}
+            </div>
+
+            <div className="grid-stagger grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+              {library.visible.map((item) => (
+                <MediaCard
+                  key={item.rowNumber}
+                  item={item}
+                  gimyDomain={gimyDomain}
+                  history={watched.get(historyKey(item))}
+                  now={now}
+                  onPlay={handlePlay}
+                  onEdit={(it) => setDialog({ kind: 'edit', item: it })}
+                  onDelete={(it) => setDialog({ kind: 'delete', item: it })}
+                  onSetProgress={library.setProgress}
+                  onFindName={(it) => setDialog({ kind: 'rename', item: it })}
+                  onWhereToRead={(it) => setDialog({ kind: 'whereToRead', item: it })}
+                  selectMode={picked !== null}
+                  selected={picked?.includes(item.rowNumber) ?? false}
+                  onToggleSelect={(it) =>
+                    setPicked((prev) =>
+                      prev === null
+                        ? prev
+                        : prev.includes(it.rowNumber)
+                          ? prev.filter((r) => r !== it.rowNumber)
+                          : [...prev, it.rowNumber],
+                    )
+                  }
+                />
+              ))}
+            </div>
+          </>
         )}
       </section>
 
@@ -463,8 +487,8 @@ export default function Home() {
             <PlayerModal
               item={live}
               watch={resolveWatch(watchUrlOf(live), live.progress, gimyDomain)}
-              onClose={close}
               onBump={library.bumpProgress}
+              onClose={close}
             />
           );
         })()}
@@ -475,6 +499,30 @@ export default function Home() {
           message={`確定要從片庫移除「${active.item.title}」嗎？這會一併刪掉 Google Sheets 裡的該列紀錄。`}
           confirmLabel="刪除"
           onConfirm={() => library.removeItem(active.item.rowNumber)}
+          onClose={close}
+        />
+      )}
+
+      {active.kind === 'bulkDelete' && (
+        <ConfirmModal
+          title="批次刪除"
+          message={`確定要刪掉選取的 ${active.rows.length} 部嗎？這會一併刪掉 Google Sheets 裡對應的列，沒辦法復原。`}
+          confirmLabel={`刪除 ${active.rows.length} 部`}
+          onConfirm={async () => {
+            await library.removeMany(active.rows);
+            setPicked(null);
+          }}
+          onClose={close}
+        />
+      )}
+
+      {active.kind === 'whereToRead' && (
+        <ReadingLinksModal
+          item={active.item}
+          onUse={(url) => {
+            void library.patchItem(active.item.rowNumber, { watchUrl: url });
+            close();
+          }}
           onClose={close}
         />
       )}
@@ -499,7 +547,6 @@ export default function Home() {
           onClose={close}
           youtubeKey={youtubeKey}
           tmdbKey={tmdbKey}
-          onOpenSettings={() => setDialog({ kind: 'settings' })}
         />
       )}
 

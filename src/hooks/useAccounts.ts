@@ -63,13 +63,14 @@ export function useAccounts() {
     setVerifying(true);
     setLoginError('');
     try {
-      const list = await refreshAccounts();
+      // 開站時的 init 已經抓過一次帳號列表了，直接用快取 ——
+      // 再打一次 GAS 只是讓使用者多等一個來回。真的沒有才重抓
+      const list = accounts.length > 0 ? accounts : await refreshAccounts();
       const matched = list.find((a) => a.toLowerCase() === name.toLowerCase());
       if (matched) {
         setStored(LAST_ACCOUNT, matched);
       } else {
-        const hint = list.length ? `（現有帳號：${list.join('、')}）` : '（目前沒有任何帳號）';
-        setLoginError(`找不到帳號「${name}」${hint}`);
+        setLoginError(`找不到帳號「${name}」`);
       }
     } catch (err) {
       setLoginError(err instanceof Error ? err.message : '登入失敗，請檢查網路或 Apps Script 部署');

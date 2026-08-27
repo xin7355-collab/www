@@ -1,5 +1,7 @@
 'use client';
 
+import { SearchResult } from '@/types/search';
+
 /**
  * YouTube Data API v3 —— 由瀏覽器直接呼叫。
  *
@@ -216,4 +218,24 @@ export async function fetchPlaylist(key: string, playlistId: string): Promise<Yo
   } while (pageToken && all.length < 200);
 
   return all;
+}
+
+/**
+ * 影片 → 搜尋結果，讓 YouTube 跟其他來源混在同一份清單裡。
+ *
+ * 跟資料型來源（Bangumi、TMDB）的差別：那些查的是「作品」，這裡是
+ * **實際能播的影片**，所以 watchUrl 直接就有值，加入後馬上點得動。
+ */
+export function toSearchResult(video: YouTubeVideo): SearchResult {
+  return {
+    title: video.title,
+    subtitle: [video.channel, video.duration, video.publishedAt].filter(Boolean).join(' · '),
+    cover: video.thumb,
+    totalEp: '',
+    mainType: '',
+    country: '',
+    url: watchUrlFor(video.id),
+    source: 'YouTube',
+    watchUrl: watchUrlFor(video.id),
+  };
 }

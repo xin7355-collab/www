@@ -1,7 +1,6 @@
 'use client';
 
 interface Props {
-  accounts: string[];
   loginName: string;
   loginError: string;
   verifying: boolean;
@@ -11,7 +10,6 @@ interface Props {
 }
 
 export default function LoginScreen({
-  accounts,
   loginName,
   loginError,
   verifying,
@@ -24,8 +22,7 @@ export default function LoginScreen({
       <div className="w-full max-w-sm star-rise">
         <div className="text-center mb-10">
           <div className="text-5xl mb-4">🎬</div>
-          <h1 className="font-display text-3xl tracking-widest text-mist mb-2">我的片庫</h1>
-          <p className="text-xs tracking-[0.3em] text-mist-shadow uppercase">Personal Stream</p>
+          <h1 className="font-display text-3xl tracking-widest text-mist">墨影</h1>
         </div>
 
         <form
@@ -67,22 +64,6 @@ export default function LoginScreen({
           </p>
         )}
 
-        {accounts.length > 0 && (
-          <div className="mt-8">
-            <p className="mb-2 text-center text-[11px] tracking-widest text-mist-shadow">現有帳號</p>
-            <div className="flex flex-wrap justify-center gap-2">
-              {accounts.map((a) => (
-                <button
-                  key={a}
-                  onClick={() => onNameChange(a)}
-                  className="rounded-full border border-ink-border px-3 py-1 text-xs text-mist-silver transition hover:border-moon-soft hover:text-moon"
-                >
-                  {a}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
       </div>
     </main>
   );

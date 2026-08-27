@@ -213,8 +213,7 @@ export default function SettingsModal({
         <section>
           <h3 className="mb-1 text-sm text-mist">站點網域</h3>
           <p className="mb-2.5 text-[11px] leading-relaxed text-mist-shadow">
-            會換網域的站點只存作品 ID，網址在渲染時才組回去。
-            站方換網域時改這一個欄位，所有作品的開播連結就一起更新。
+            站方換網域時改這裡，所有作品的開播連結一起更新。
           </p>
           <div className="flex gap-2">
             <input
@@ -241,7 +240,6 @@ export default function SettingsModal({
         <section className="border-t border-ink-border pt-5">
           <h3 className="mb-1 text-sm text-mist">常用站點捷徑</h3>
           <p className="mb-2.5 text-[11px] leading-relaxed text-mist-shadow">
-            片庫上方會出現這些連結，一鍵前往你常去找片的站。
             綁了分類的捷徑只在該分類出現，不綁就是每個分類都顯示。
           </p>
 
@@ -312,8 +310,7 @@ export default function SettingsModal({
             {youtubeKey && <span className="ml-2 text-[11px] text-jade">已設定</span>}
           </h3>
           <p className="mb-2.5 text-[11px] leading-relaxed text-mist-shadow">
-            填了之後就能在搜尋視窗直接搜 YouTube、看縮圖挑片，一鍵加進片庫，
-            也能整份匯入播放清單。免費額度每天約 100 次搜尋。
+            搜尋會多一份 YouTube 影片。免費額度每天約 100 次搜尋。
           </p>
           <div className="flex gap-2">
             <input
@@ -353,8 +350,7 @@ export default function SettingsModal({
             {tmdbKey && <span className="ml-2 text-[11px] text-jade">已設定</span>}
           </h3>
           <p className="mb-2.5 text-[11px] leading-relaxed text-mist-shadow">
-            填了之後搜尋電影與影集會多一份 TMDB 的結果：正式繁中片名、海報、
-            總集數，還會告訴你<span className="text-mist-silver">這部在台灣哪個平台上架</span>。
+            搜尋電影與影集會多一份 TMDB 的結果，還會告訴你<span className="text-mist-silver">在台灣哪裡看得到</span>。
           </p>
           <div className="flex gap-2">
             <input
@@ -388,23 +384,6 @@ export default function SettingsModal({
 
         <section className="border-t border-ink-border pt-5">
           <h3 className="mb-1 text-sm text-mist">快速加入</h3>
-          <p className="mb-2.5 text-[11px] leading-relaxed text-mist-shadow">
-            三種不用手動打字的加入方式：
-          </p>
-          <ul className="mb-3 space-y-1.5 text-[11px] leading-relaxed text-mist-shadow">
-            <li>
-              <span className="text-mist-silver">📋 剪貼簿</span> —— 複製網址後，按片庫右上角的
-              📋，自動帶入新增表單
-            </li>
-            <li>
-              <span className="text-mist-silver">手機分享</span> ——
-              在瀏覽器或任何 app 點分享，選「我的片庫」（需先把本站加到主畫面；iOS 不支援這個功能）
-            </li>
-            <li>
-              <span className="text-mist-silver">書籤小工具</span> ——
-              桌機在任何影片頁點一下，連網頁標題一起帶回來
-            </li>
-          </ul>
           <button
             onClick={copyBookmarklet}
             className="w-full rounded-lg border border-ink-border-strong py-2 text-xs text-mist-silver transition hover:border-moon-soft hover:text-moon"
@@ -416,7 +395,7 @@ export default function SettingsModal({
         <section className="border-t border-ink-border pt-5">
           <h3 className="mb-1 text-sm text-mist">外觀</h3>
           <p className="mb-2.5 text-[11px] leading-relaxed text-mist-shadow">
-            只影響這台裝置。手機想放大字、電腦維持原樣，兩邊互不干擾。
+            只影響這台裝置。
           </p>
 
           <p className="mb-1.5 text-[11px] text-mist-silver">背景</p>
@@ -455,17 +434,12 @@ export default function SettingsModal({
               </button>
             ))}
           </div>
-          <p className="mt-1.5 text-[10px] leading-relaxed text-mist-shadow">
-            字級會連同間距一起縮放，不會只有字變大而框沒變。
-          </p>
         </section>
 
         <section className="border-t border-ink-border pt-5">
           <h3 className="mb-1 text-sm text-mist">片庫轉繁體</h3>
           <p className="mb-2.5 text-[11px] leading-relaxed text-mist-shadow">
-            現在從搜尋加入的標題都會自動轉繁體，但<span className="text-mist-silver">在那之前加的還是簡體</span>。
-            這個按鈕把片庫裡既有的簡體標題一次補轉過來。
-            只改名稱，其他欄位不動；已經是繁體的不會被碰到。
+            把片庫裡既有的簡體標題一次補轉。只改名稱，會先讓你看過再寫。
           </p>
 
           {convertList.length === 0 ? (
@@ -509,9 +483,7 @@ export default function SettingsModal({
         <section className="border-t border-ink-border pt-5">
           <h3 className="mb-1 text-sm text-mist">每日排程更新</h3>
           <p className="mb-2.5 text-[11px] leading-relaxed text-mist-shadow">
-            裝了之後，後端每天早上 8 點會自己去 TVmaze 更新已播集數與下一集日期，
-            寫進試算表。<span className="text-mist-silver">所有裝置都會看到同一份</span>，
-            開 App 時也不用等 API。裝一次就好。
+            後端每天早上 8 點自己更新已播集數與下一集日期，<span className="text-mist-silver">所有裝置一致</span>。裝一次就好。
           </p>
           <div className="flex gap-2">
             <button
@@ -540,7 +512,6 @@ export default function SettingsModal({
           <h3 className="mb-1 text-sm text-mist">備份</h3>
           <p className="mb-2.5 text-[11px] leading-relaxed text-mist-shadow">
             片庫只存在一份 Google 試算表裡，誤刪就沒有第二份。
-            匯出的是純 JSON，人看得懂，也能匯進另一個帳號。
           </p>
           <div className="flex gap-2">
             <button
@@ -573,9 +544,7 @@ export default function SettingsModal({
         <section className="border-t border-ink-border pt-5">
           <h3 className="mb-1 text-sm text-mist">找出重複</h3>
           <p className="mb-2.5 text-[11px] leading-relaxed text-mist-shadow">
-            同一部從不同來源加了兩次很常見。
-            <span className="text-mist-silver">連結相同或名稱相同</span>就算同一部，
-            每組會留下最早加入的那一筆。
+            <span className="text-mist-silver">連結相同或名稱相同</span>就算同一部，每組留最早的那筆。
           </p>
 
           {dupGroups === null ? (
