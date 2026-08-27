@@ -2,6 +2,7 @@ import { searchArchive } from './archive';
 import { searchBangumi } from './bangumi';
 import { searchMangaDex } from './mangadex';
 import { searchTmdb } from './tmdb';
+import { loadConverter } from './s2t';
 import { MediaPatch, NewMediaItem } from '@/types/media';
 import { SearchResult } from '@/types/search';
 
@@ -248,7 +249,7 @@ export async function searchWorks(
   // 順序＝品質順序：TMDB 的繁中資料最完整，後端那份（iTunes / Google Books）墊底
   const results = settled.flatMap((r) => (r.status === 'fulfilled' ? r.value : []));
 
-  if (results.length > 0) return results;
+  if (results.length > 0) return traditionalize(results);
 
   // 全都沒結果時，把真正的失敗原因講出來，而不是一句「查無結果」
   const failure = settled.find((r): r is PromiseRejectedResult => r.status === 'rejected');
@@ -259,6 +260,23 @@ export async function searchWorks(
 }
 
 const none = () => Promise.resolve<SearchResult[]>([]);
+
+/**
+ * 各來源的中文品質不一：Bangumi 是簡體站，MangaDex 的 zh 條目多半也是簡體，
+ * 不轉的話片庫會同時出現「凡人修仙传」與「凡人修仙傳」。統一在這裡轉，
+ * 因為使用者按「加入」時存進 Sheet 的就是這個標題。
+ *
+ * 已經是繁體的原樣通過，所以 TMDB 那份正式繁中片名不受影響。
+ * 字典載不起來時退回原文 —— 標題是簡體總比整個搜尋掛掉好。
+ */
+async function traditionalize(results: SearchResult[]): Promise<SearchResult[]> {
+  try {
+    const convert = await loadConverter();
+    return results.map((r) => ({ ...r, title: convert(r.title), subtitle: convert(r.subtitle) }));
+  } catch {
+    return results;
+  }
+}
 
 /** 後端的搜尋：補瀏覽器拿不到的 iTunes 與 Google Books */
 async function searchViaBackend(q: string, kind: string): Promise<SearchResult[]> {
