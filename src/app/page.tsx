@@ -9,6 +9,7 @@ import LoginScreen from '@/components/LoginScreen';
 import MediaCard from '@/components/MediaCard';
 import PlayerModal from '@/components/PlayerModal';
 import SearchModal from '@/components/SearchModal';
+import RenameModal from '@/components/RenameModal';
 import SettingsModal from '@/components/SettingsModal';
 import SiteCatalogModal from '@/components/SiteCatalogModal';
 import SiteShortcuts from '@/components/SiteShortcuts';
@@ -17,6 +18,7 @@ import { useLibrary } from '@/hooks/useLibrary';
 import { useSettings } from '@/hooks/useSettings';
 import { useAppearance } from '@/lib/appearance';
 import { historyKey, indexHistory, recordWatch, useHistory } from '@/lib/history';
+import { BEHIND_TAB, episodesBehind } from '@/lib/schedule';
 import { needsRefresh } from '@/lib/schedule';
 import { fetchSchedule } from '@/lib/tvmaze';
 import { clearShared, useSharedInput } from '@/lib/quickAdd';
@@ -41,6 +43,7 @@ type Dialog =
   | { kind: 'edit'; item: MediaItem }
   | { kind: 'play'; item: MediaItem }
   | { kind: 'delete'; item: MediaItem }
+  | { kind: 'rename'; item: MediaItem }
   | { kind: 'settings' }
   | { kind: 'sites' }
   | { kind: 'search' };
@@ -254,9 +257,10 @@ export default function Home() {
       : [];
 
   // 各分類的筆數，給 FilterBar 顯示
-  const counts: Record<string, number> = { 全部: library.items.length };
+  const counts: Record<string, number> = { 全部: library.items.length, [BEHIND_TAB]: 0 };
   for (const it of library.items) {
     if (it.mainType) counts[it.mainType] = (counts[it.mainType] ?? 0) + 1;
+    if (episodesBehind(it) > 0) counts[BEHIND_TAB] += 1;
   }
 
   return (
@@ -369,6 +373,8 @@ export default function Home() {
                   onEdit={(it) => setDialog({ kind: 'edit', item: it })}
                   onDelete={(it) => setDialog({ kind: 'delete', item: it })}
                   onBump={library.bumpProgress}
+                  onSetProgress={library.setProgress}
+                  onFindName={(it) => setDialog({ kind: 'rename', item: it })}
                 />
               </div>
             ))}
@@ -406,6 +412,8 @@ export default function Home() {
                 onEdit={(it) => setDialog({ kind: 'edit', item: it })}
                 onDelete={(it) => setDialog({ kind: 'delete', item: it })}
                 onBump={library.bumpProgress}
+                onSetProgress={library.setProgress}
+                onFindName={(it) => setDialog({ kind: 'rename', item: it })}
               />
             ))}
           </div>
@@ -471,6 +479,20 @@ export default function Home() {
         />
       )}
 
+      {active.kind === 'rename' && (
+        <RenameModal
+          item={active.item}
+          tmdbKey={tmdbKey}
+          onRename={(title) => {
+            if (title && title !== active.item.title) {
+              void library.patchItem(active.item.rowNumber, { title });
+            }
+            close();
+          }}
+          onClose={close}
+        />
+      )}
+
       {active.kind === 'search' && (
         <SearchModal
           onAdd={library.addMany}
@@ -490,6 +512,7 @@ export default function Home() {
           theme={theme}
           onSaveTheme={saveTheme}
           onPatch={library.patchItem}
+          onRemove={library.removeItem}
           fontScale={fontScale}
           onSaveFontScale={saveFontScale}
           gimyDomain={gimyDomain}

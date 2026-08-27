@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import * as api from '@/lib/api';
 import { sheetToItems } from '@/lib/schema';
+import { BEHIND_TAB, episodesBehind } from '@/lib/schedule';
 import { MediaItem, MediaPatch, NewMediaItem, SortKey } from '@/types/media';
 
 /** 連按進度鍵時的合併視窗 */
@@ -165,6 +166,17 @@ export function useLibrary(account: string) {
     queuePatch(item.rowNumber, { progress: String(next) });
   };
 
+  /**
+   * 直接設定進度。跟 bumpProgress 走同一條 debounce ——
+   * 輸入框每打一個字就送一次會很吵，而且最後一次才是真的
+   */
+  const setProgress = (item: MediaItem, value: number) => {
+    const next = Math.max(0, Math.floor(value));
+    const current = Number.parseInt(item.progress.replace(/[^\d]/g, ''), 10) || 0;
+    if (next === current) return;
+    queuePatch(item.rowNumber, { progress: String(next) });
+  };
+
   const addItem = async (item: NewMediaItem) => {
     setBusy(true);
     setError('');
@@ -232,7 +244,10 @@ export function useLibrary(account: string) {
 
   const keyword = search.trim().toLowerCase();
   const visible = items
-    .filter((it) => tab === '全部' || it.mainType === tab)
+    // 「待追」不是分類而是狀態：已經播了但我還沒追上的
+    .filter((it) =>
+      tab === '全部' ? true : tab === BEHIND_TAB ? episodesBehind(it) > 0 : it.mainType === tab,
+    )
     .filter((it) => statusFilter === '全部' || it.status === statusFilter)
     .filter((it) => {
       if (!keyword) return true;
@@ -280,6 +295,7 @@ export function useLibrary(account: string) {
     reload,
     patchItem,
     bumpProgress,
+    setProgress,
     addItem,
     addMany,
     removeItem,

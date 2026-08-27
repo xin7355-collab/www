@@ -5,7 +5,7 @@ import Modal from './Modal';
 import { installDailyTrigger, maskedUrl, probe, Probe, refreshSchedulesNow } from '@/lib/api';
 import { FONT_SCALES, THEMES } from '@/lib/appearance';
 import { loadConverter } from '@/lib/s2t';
-import { downloadBackup, parseBackup } from '@/lib/backup';
+import { downloadBackup, downloadCsv, findDuplicates, parseBackup } from '@/lib/backup';
 import { addShortcut, removeShortcut, SiteShortcut } from '@/lib/shortcuts';
 import { DEFAULT_GIMY_DOMAIN } from '@/lib/watchUrl';
 import { MAIN_TYPES, MediaItem, MediaPatch, NewMediaItem } from '@/types/media';
@@ -15,6 +15,8 @@ interface Props {
   onSaveTheme: (value: string) => void;
   /** 就地改一筆（片庫轉繁體用） */
   onPatch: (row: number, fields: MediaPatch) => Promise<void>;
+  /** 刪掉一列（清理重複用） */
+  onRemove: (row: number) => Promise<void>;
   fontScale: string;
   onSaveFontScale: (value: string) => void;
   gimyDomain: string;
@@ -36,6 +38,7 @@ export default function SettingsModal({
   theme,
   onSaveTheme,
   onPatch,
+  onRemove,
   fontScale,
   onSaveFontScale,
   gimyDomain,
@@ -65,6 +68,9 @@ export default function SettingsModal({
   const [convertList, setConvertList] = useState<{ row: number; from: string; to: string }[]>([]);
   const [convertBusy, setConvertBusy] = useState(false);
   const [convertMsg, setConvertMsg] = useState('');
+  const [dupGroups, setDupGroups] = useState<MediaItem[][] | null>(null);
+  const [dupBusy, setDupBusy] = useState(false);
+  const [dupMsg, setDupMsg] = useState('');
   const [ytKey, setYtKey] = useState(youtubeKey);
   const [tmdb, setTmdb] = useState(tmdbKey);
   const [triggerMsg, setTriggerMsg] = useState('');
@@ -169,6 +175,35 @@ export default function SettingsModal({
       setConvertMsg(`${err instanceof Error ? err.message : '轉換中斷'}（已完成 ${done} 筆）`);
     } finally {
       setConvertBusy(false);
+    }
+  };
+
+  /**
+   * 清掉重複的，每組只留第一筆。
+   *
+   * **一定要由大到小刪** —— Sheet 刪掉一列會讓後面每一列的列號往前移一位，
+   * 由小到大刪的話第二筆之後全部會刪到隔壁的作品。
+   */
+  const cleanDuplicates = async () => {
+    if (!dupGroups) return;
+    const rows = dupGroups
+      .flatMap((group) => group.slice(1).map((it) => it.rowNumber))
+      .sort((a, b) => b - a);
+
+    setDupBusy(true);
+    let done = 0;
+    try {
+      for (const row of rows) {
+        setDupMsg(`刪除中… ${done + 1} / ${rows.length}`);
+        await onRemove(row);
+        done += 1;
+      }
+      setDupMsg(`刪掉了 ${done} 筆重複`);
+      setDupGroups(null);
+    } catch (err) {
+      setDupMsg(`${err instanceof Error ? err.message : '刪除中斷'}（已刪 ${done} 筆）`);
+    } finally {
+      setDupBusy(false);
     }
   };
 
@@ -525,7 +560,70 @@ export default function SettingsModal({
               />
             </label>
           </div>
+          <button
+            onClick={() => downloadCsv(account, items)}
+            disabled={items.length === 0}
+            className="mt-2 w-full rounded-lg border border-ink-border-strong py-2 text-xs text-mist-silver transition hover:border-moon-soft hover:text-moon disabled:opacity-40"
+          >
+            匯出 CSV（給試算表看的）
+          </button>
           {importMsg && <p className="mt-2 text-[11px] text-mist-silver">{importMsg}</p>}
+        </section>
+
+        <section className="border-t border-ink-border pt-5">
+          <h3 className="mb-1 text-sm text-mist">找出重複</h3>
+          <p className="mb-2.5 text-[11px] leading-relaxed text-mist-shadow">
+            同一部從不同來源加了兩次很常見。
+            <span className="text-mist-silver">連結相同或名稱相同</span>就算同一部，
+            每組會留下最早加入的那一筆。
+          </p>
+
+          {dupGroups === null ? (
+            <button
+              onClick={() => {
+                const found = findDuplicates(items);
+                // 空陣列不是 null，直接塞進去會讓畫面切到「確認刪除」那一支，
+                // 顯示一顆「刪掉 0 筆重複」的按鈕。沒找到就維持在原本的狀態
+                setDupGroups(found.length > 0 ? found : null);
+                setDupMsg(found.length === 0 ? '沒有重複的' : '');
+              }}
+              className="w-full rounded-lg border border-ink-border-strong py-2 text-xs text-mist-silver transition hover:border-moon-soft hover:text-moon"
+            >
+              檢查重複
+            </button>
+          ) : (
+            <>
+              <div className="mb-2 max-h-40 space-y-2 overflow-y-auto rounded-lg border border-ink-border p-2">
+                {dupGroups.map((group) => (
+                  <div key={group[0].rowNumber}>
+                    <p className="truncate text-[11px] text-mist">{group[0].title}</p>
+                    <p className="text-[10px] text-mist-shadow">
+                      共 {group.length} 筆，會刪掉其中 {group.length - 1} 筆
+                    </p>
+                  </div>
+                ))}
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={cleanDuplicates}
+                  disabled={dupBusy}
+                  className="flex-1 rounded-lg bg-moon py-2 text-xs font-medium text-ink-black transition hover:bg-moon-soft disabled:opacity-40"
+                >
+                  {dupBusy
+                    ? '刪除中…'
+                    : `刪掉 ${dupGroups.reduce((n, g) => n + g.length - 1, 0)} 筆重複`}
+                </button>
+                <button
+                  onClick={() => { setDupGroups(null); setDupMsg(''); }}
+                  disabled={dupBusy}
+                  className="rounded-lg border border-ink-border-strong px-3 text-xs text-mist-silver transition hover:text-mist disabled:opacity-40"
+                >
+                  取消
+                </button>
+              </div>
+            </>
+          )}
+          {dupMsg && <p className="mt-2 text-[11px] text-mist-silver">{dupMsg}</p>}
         </section>
 
         <section className="border-t border-ink-border pt-5">

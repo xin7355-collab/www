@@ -16,6 +16,9 @@ import { MediaItem } from '@/types/media';
  * 讓使用者選一次、記起來，比每次猜可靠得多。
  */
 
+/** 「待追」分頁的識別字串。它不是 MAIN_TYPES 之一，是一個狀態篩選 */
+export const BEHIND_TAB = '待追';
+
 export interface Schedule {
   /** 到今天為止已播出幾集 */
   aired: number;
@@ -33,6 +36,19 @@ export function scheduleFrom(item: MediaItem): Schedule | null {
   if (aired === 0 && !item.nextAirDate) return null;
 
   return { aired, nextDate: item.nextAirDate.trim(), nextLabel: item.nextEpLabel.trim() };
+}
+
+/**
+ * 落後最新一集幾集。沒綁排程就是 0（沒有分母，談不上落後）。
+ *
+ * 卡片的提示、「待追」分頁的篩選與計數都用這一支 —— 各自算一份很容易
+ * 在改動時漂掉，變成分頁裡有這部、卡片上卻說已追上。
+ */
+export function episodesBehind(item: MediaItem): number {
+  const aired = scheduleFrom(item)?.aired ?? 0;
+  if (aired <= 0) return 0;
+  const done = Number.parseInt(item.progress.replace(/[^\d]/g, ''), 10) || 0;
+  return Math.max(0, aired - done);
 }
 
 /**

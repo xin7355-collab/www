@@ -1,5 +1,6 @@
 'use client';
 
+import { BEHIND_TAB } from '@/lib/schedule';
 import { MAIN_TYPES, SortKey, STATUSES } from '@/types/media';
 
 interface Props {
@@ -32,7 +33,8 @@ export default function FilterBar({
   setSortKey,
   counts,
 }: Props) {
-  const tabs = ['全部', ...MAIN_TYPES];
+  // 「待追」排在最前面 —— 打開 App 最想知道的就是「有哪幾部積著沒追」
+  const tabs = [BEHIND_TAB, '全部', ...MAIN_TYPES];
 
   return (
     <div className="space-y-3">
@@ -41,6 +43,8 @@ export default function FilterBar({
         {tabs.map((t) => {
           const active = tab === t;
           const n = counts[t] ?? 0;
+          // 沒有落後的作品時不顯示「待追」，免得多一個永遠是 0 的分頁
+          if (t === BEHIND_TAB && n === 0 && !active) return null;
           return (
             <button
               key={t}
@@ -48,7 +52,9 @@ export default function FilterBar({
               className={`shrink-0 rounded-full border px-3 py-1 text-xs transition ${
                 active
                   ? 'border-moon-soft bg-moon/10 text-moon'
-                  : 'border-ink-border text-mist-silver hover:border-ink-border-strong hover:text-mist'
+                  : t === BEHIND_TAB
+                    ? 'border-moon-soft/40 text-moon-soft hover:border-moon-soft'
+                    : 'border-ink-border text-mist-silver hover:border-ink-border-strong hover:text-mist'
               }`}
             >
               {t}
