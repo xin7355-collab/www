@@ -122,8 +122,6 @@ export function readingLinks(title: string, mainType: string): ReadingLink[] {
   const manga: ReadingLink[] = [
     { label: 'MangaDex', url: `https://mangadex.org/search?q=${q}`, note: '多為官方授權的翻譯' },
     { label: 'LINE WEBTOON', url: `https://www.webtoons.com/zh-hant/search?keyword=${q}` },
-    { label: 'BOOK☆WALKER', url: `https://www.bookwalker.com.tw/search?w=${q}`, note: '購買' },
-    { label: 'Kobo', url: `https://www.kobo.com/tw/zh/search?query=${q}`, note: '購買' },
   ];
 
   const novel: ReadingLink[] = [
@@ -131,8 +129,6 @@ export function readingLinks(title: string, mainType: string): ReadingLink[] {
     { label: '小説家になろう', url: `https://yomou.syosetu.com/search.php?word=${q}`, note: '日文，免費' },
     { label: 'カクヨム', url: `https://kakuyomu.jp/search?q=${q}`, note: '日文，免費' },
     { label: 'Google 圖書', url: `https://www.google.com/search?tbm=bks&q=${q}`, note: '部分可試閱' },
-    { label: 'Kobo', url: `https://www.kobo.com/tw/zh/search?query=${q}`, note: '購買' },
-    { label: '博客來', url: `https://search.books.com.tw/search/query/key=${q}`, note: '購買' },
   ];
 
   return mainType === '漫畫' ? manga : mainType === '小說' ? novel : [...novel, ...manga];

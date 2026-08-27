@@ -1,8 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { formatAgo, formatClock, HistoryEntry } from '@/lib/history';
-import { episodesBehind, formatAirdate, scheduleFrom } from '@/lib/schedule';
+import { HistoryEntry } from '@/lib/history';
+import { episodesBehind, scheduleFrom } from '@/lib/schedule';
 import { deriveCover, resolveWatch, watchUrlOf } from '@/lib/watchUrl';
 import { MediaItem } from '@/types/media';
 
@@ -11,8 +11,6 @@ interface Props {
   gimyDomain: string;
   /** 這部的觀看紀錄，沒看過就是 undefined */
   history?: HistoryEntry;
-  /** 由上層一次算好的「現在」，避免每張卡各自呼叫 Date.now */
-  now: number;
   onPlay: (item: MediaItem) => void;
   onEdit: (item: MediaItem) => void;
   onDelete: (item: MediaItem) => void;
@@ -37,14 +35,16 @@ interface Props {
  * - 編輯／刪除／查中文名收進封面右上的 ⋯，平常不佔位置
  * - 狀態、季別、國家、平台這些原本各佔一列的標籤拿掉了 ——
  *   狀態上方本來就有篩選器，其餘在編輯表單裡看得到，不值得每張卡都佔一行
+ * - 「落後幾集」是追連載時唯一想知道的，收成封面上的一顆小標籤而不是一行字
  *
- * 改版前是「封面 + 六個堆疊區塊」，手機兩欄下每張卡都變成一座高塔。
+ * 卡片**只有一張封面的高度**：標題與進度疊在封面底部的漸層上，
+ * 而不是排在圖片下面。改版前圖片下面還有標題、進度、提示三段，
+ * 手機兩欄下每張卡都變成一座高塔。
  */
 export default function MediaCard({
   item,
   gimyDomain,
   history,
-  now,
   onPlay,
   onEdit,
   onDelete,
@@ -69,7 +69,6 @@ export default function MediaCard({
 
   const watch = resolveWatch(watchUrlOf(item), item.progress, gimyDomain);
   const playable = watch.kind !== 'none';
-  const rating = Number(item.rating) || 0;
 
   const done = Number.parseInt(item.progress.replace(/[^\d]/g, ''), 10) || 0;
 
@@ -81,18 +80,15 @@ export default function MediaCard({
   const aired = schedule?.aired ?? 0;
   const total = aired > 0 ? aired : Number.parseInt(item.totalEp.replace(/[^\d]/g, ''), 10) || 0;
   const percent = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 0;
-  const caughtUp = aired > 0 && done >= aired;
   const behind = episodesBehind(item);
-  const next = schedule?.nextDate ?? '';
 
   // 自己填的封面優先；沒填就看能不能從連結推一張出來（YouTube 等）
   const cover = item.cover || deriveCover(item.watchUrl);
   const showCover = Boolean(cover) && !coverFailed;
 
-  // 看到幾分幾秒（只有直鏈量得到）與上次觀看時間
+  // 影片播到幾分幾秒（只有直鏈量得到）
   const watchedRatio =
     history && history.duration > 0 ? Math.min(1, history.position / history.duration) : 0;
-  const ago = history ? formatAgo(history.at, now) : '';
 
   const commitDraft = () => {
     if (draft === null) return;
@@ -101,37 +97,17 @@ export default function MediaCard({
     setDraft(null);
   };
 
-  /**
-   * 卡片底下那一行小字。**一次只講一件事** —— 全部排出來就回到改版前
-   * 那種密密麻麻的樣子了，所以照重要性挑：落後幾集 > 下一集 > 上次看到哪。
-   */
-  const hint = (() => {
-    if (behind > 0) return <span className="text-moon">落後 {behind} 集</span>;
-    if (next) {
-      return (
-        <span>
-          下一集 <span className="text-moon">{formatAirdate(next)}</span>
-        </span>
-      );
-    }
-    if (caughtUp) return <span className="text-jade">已追上最新</span>;
-    if (history && history.position > 5) {
-      return <span className="text-cinnabar/80">看到 {formatClock(history.position)}</span>;
-    }
-    return ago ? <span>{ago}看過</span> : null;
-  })();
-
   return (
     <article
-      className={`star-rise group relative flex flex-col overflow-hidden rounded-xl border bg-ink-deep transition ${
+      className={`star-rise group relative aspect-[16/10] overflow-hidden rounded-xl border bg-ink-deep transition ${
         selected ? 'border-moon' : 'border-ink-border hover:border-ink-border-strong'
       }`}
     >
-      {/* 封面本身就是開播鍵 —— 這是最常做的事，不該藏在一顆小按鈕裡 */}
+      {/* 整張卡就是開播鍵 —— 這是最常做的事，不該藏在一顆小按鈕裡 */}
       <button
         onClick={() => (selectMode ? onToggleSelect?.(item) : playable && onPlay(item))}
         disabled={pending || (!selectMode && !playable)}
-        className="relative block aspect-[16/10] w-full overflow-hidden bg-ink-mist disabled:cursor-default"
+        className="absolute inset-0 block h-full w-full overflow-hidden bg-ink-mist disabled:cursor-default"
         title={selectMode ? '點一下選取' : watch.hint || '尚未設定觀看連結'}
         aria-label={selectMode ? `選取 ${item.title}` : playable ? `播放 ${item.title}` : item.title}
       >
@@ -150,46 +126,90 @@ export default function MediaCard({
             <span className="font-display text-3xl text-mist-shadow">{item.title.slice(0, 2)}</span>
           </div>
         )}
+      </button>
 
-        {playable && !selectMode && (
-          <span className="absolute inset-0 flex items-center justify-center bg-black/45 opacity-0 transition group-hover:opacity-100">
-            <span className="flex h-12 w-12 items-center justify-center rounded-full border border-moon/70 bg-ink-black/70 text-lg text-moon">
-              {watch.icon}
-            </span>
+      {/* 標題與進度疊在封面上而不是排在下面 —— 卡片就只有一張圖的高度 */}
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-ink-black via-ink-black/85 to-transparent px-2.5 pb-2 pt-6">
+        <h3 className="font-display line-clamp-2 text-xs leading-snug text-mist" title={item.title}>
+          {item.title}
+        </h3>
+
+        <div className="mt-1">
+          {draft !== null ? (
+            <input
+              className="font-num pointer-events-auto h-6 w-full rounded border border-moon-soft bg-ink-black/90 text-center text-[11px] text-mist outline-none"
+              value={draft}
+              autoFocus
+              inputMode="numeric"
+              onChange={(e) => setDraft(e.target.value)}
+              onBlur={commitDraft}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') commitDraft();
+                if (e.key === 'Escape') setDraft(null);
+              }}
+              aria-label="直接輸入集數"
+            />
+          ) : (
+            // 從 0 追到第 138 話用按的要按一百多次，點數字直接輸入才實際
+            <button
+              onClick={() => setDraft(String(done))}
+              disabled={pending}
+              className="font-num pointer-events-auto rounded px-1 text-[11px] text-mist-silver transition hover:bg-ink-mist hover:text-mist disabled:opacity-50"
+              title="點一下直接輸入集數"
+            >
+              {done}
+              {total > 0 && (
+                <span className={aired > 0 ? 'text-moon-soft' : 'text-mist-shadow'}> / {total}</span>
+              )}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* 集數進度條，貼在卡片最底 */}
+      {percent > 0 && (
+        <div className="absolute inset-x-0 bottom-0 h-0.5 bg-ink-black/60">
+          <div className="h-full bg-moon" style={{ width: `${percent}%` }} />
+        </div>
+      )}
+
+      {/* 影片播到哪（只有直鏈量得到） */}
+      {watchedRatio > 0 && (
+        <span className="absolute inset-x-0 bottom-0.5 h-0.5 bg-ink-black/60">
+          <span
+            className="block h-full bg-cinnabar"
+            style={{ width: `${Math.round(watchedRatio * 100)}%` }}
+          />
+        </span>
+      )}
+
+      {playable && !selectMode && (
+        <span className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/45 opacity-0 transition group-hover:opacity-100">
+          <span className="flex h-11 w-11 items-center justify-center rounded-full border border-moon/70 bg-ink-black/70 text-lg text-moon">
+            {watch.icon}
+          </span>
+        </span>
+      )}
+
+      <span className="pointer-events-none absolute left-2 top-2 flex items-center gap-1">
+        {item.mainType && (
+          <span className="rounded bg-ink-black/80 px-1.5 py-0.5 text-[10px] tracking-wider text-mist-silver">
+            {item.mainType}
           </span>
         )}
-
-        <span className="absolute left-2 top-2 flex items-center gap-1">
-          {item.mainType && (
-            <span className="rounded bg-ink-black/80 px-1.5 py-0.5 text-[10px] tracking-wider text-mist-silver">
-              {item.mainType}
-            </span>
-          )}
-          {rating > 0 && (
-            <span className="rounded bg-ink-black/80 px-1.5 py-0.5 text-[10px] text-moon">
-              {'★'.repeat(rating)}
-            </span>
-          )}
-        </span>
-
+        {/* 落後幾集本來是底下的一行字，收成一顆小標籤 —— 這是追連載時唯一想知道的 */}
+        {behind > 0 && (
+          <span className="rounded bg-moon/90 px-1.5 py-0.5 text-[10px] font-medium text-ink-black">
+            落後 {behind}
+          </span>
+        )}
         {!playable && (
-          <span className="absolute bottom-2 left-2 rounded bg-ink-black/80 px-1.5 py-0.5 text-[10px] text-mist-shadow">
+          <span className="rounded bg-ink-black/80 px-1.5 py-0.5 text-[10px] text-mist-shadow">
             無連結
           </span>
         )}
+      </span>
 
-        {/* 影片播到哪（只有直鏈量得到），貼在封面最底 */}
-        {watchedRatio > 0 && (
-          <span className="absolute inset-x-0 bottom-0 h-1 bg-ink-black/70">
-            <span
-              className="block h-full bg-cinnabar"
-              style={{ width: `${Math.round(watchedRatio * 100)}%` }}
-            />
-          </span>
-        )}
-      </button>
-
-      {/* ⋯ 疊在封面上，不佔內容高度。放在 button 外面才不會連帶觸發開播 */}
       {pending ? (
         <span className="absolute right-1.5 top-1.5 z-20 rounded-full bg-ink-black/80 px-2 py-1 text-[10px] text-mist-shadow">
           加入中
@@ -233,69 +253,25 @@ export default function MediaCard({
                 show: item.mainType === '小說' || item.mainType === '漫畫',
               },
               { label: '刪除', run: () => onDelete(item), danger: true, show: true },
-            ].filter((a) => a.show).map((action) => (
-              <button
-                key={action.label}
-                onClick={() => {
-                  setMenuOpen(false);
-                  action.run();
-                }}
-                className={`block w-full px-3 py-2 text-left text-xs transition hover:bg-ink-mist ${
-                  action.danger ? 'text-cinnabar' : 'text-mist-silver hover:text-mist'
-                }`}
-              >
-                {action.label}
-              </button>
-            ))}
+            ]
+              .filter((a) => a.show)
+              .map((action) => (
+                <button
+                  key={action.label}
+                  onClick={() => {
+                    setMenuOpen(false);
+                    action.run();
+                  }}
+                  className={`block w-full px-3 py-2 text-left text-xs transition hover:bg-ink-mist ${
+                    action.danger ? 'text-cinnabar' : 'text-mist-silver hover:text-mist'
+                  }`}
+                >
+                  {action.label}
+                </button>
+              ))}
           </div>
         </>
       )}
-
-      {/* 集數進度條 */}
-      {percent > 0 && (
-        <div className="h-0.5 w-full bg-ink-mist">
-          <div className="h-full bg-moon transition-all" style={{ width: `${percent}%` }} />
-        </div>
-      )}
-
-      <div className="flex flex-1 flex-col gap-1.5 p-2.5">
-        <h3 className="font-display line-clamp-2 text-sm leading-snug text-mist" title={item.title}>
-          {item.title}
-        </h3>
-
-        <div className="mt-auto">
-          {draft !== null ? (
-            <input
-              className="font-num h-7 w-full rounded border border-moon-soft bg-ink-mist text-center text-xs text-mist outline-none"
-              value={draft}
-              autoFocus
-              inputMode="numeric"
-              onChange={(e) => setDraft(e.target.value)}
-              onBlur={commitDraft}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') commitDraft();
-                if (e.key === 'Escape') setDraft(null);
-              }}
-              aria-label="直接輸入集數"
-            />
-          ) : (
-            // 從 0 追到第 138 話用按的要按一百多次，點數字直接輸入才實際
-            <button
-              onClick={() => setDraft(String(done))}
-              disabled={pending}
-              className="font-num h-7 w-full rounded text-center text-xs text-mist transition hover:bg-ink-mist disabled:opacity-50"
-              title="點一下直接輸入集數"
-            >
-              {done}
-              {total > 0 && (
-                <span className={aired > 0 ? 'text-moon-soft' : 'text-mist-shadow'}> / {total}</span>
-              )}
-            </button>
-          )}
-        </div>
-
-        {hint && <p className="text-[10px] leading-none text-mist-shadow">{hint}</p>}
-      </div>
     </article>
   );
 }

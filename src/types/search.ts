@@ -20,11 +20,7 @@ export interface SearchResult {
   archiveId?: string;
 
   // ── 以下只有 TMDB 的結果會有 ──
-  /** 用來補查總集數與上架平台 */
+  /** 用來補查總集數 */
   tmdbId?: number;
   mediaType?: 'movie' | 'tv';
-  /** 台灣可訂閱觀看的平台 */
-  providers?: string[];
-  /** JustWatch 頁面。TMDB 條款要求顯示 providers 時標示這個出處 */
-  providerLink?: string;
 }

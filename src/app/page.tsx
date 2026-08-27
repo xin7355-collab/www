@@ -31,7 +31,6 @@ import { MediaItem, NewMediaItem } from '@/types/media';
  * 隨機取一個。刻意定義在元件外：Math.random 是不純函式，
  * 寫在元件內會被 React Compiler 擋下（同一次 render 可能得到不同結果）。
  */
-const stamp = () => Date.now();
 
 
 type Dialog =
@@ -42,7 +41,7 @@ type Dialog =
   | { kind: 'play'; item: MediaItem }
   | { kind: 'delete'; item: MediaItem }
   | { kind: 'rename'; item: MediaItem }
-  | { kind: 'bulkDelete'; rows: number[] }
+  | { kind: 'bulkDelete'; keys: string[] }
   | { kind: 'whereToRead'; item: MediaItem }
   | { kind: 'settings' }
   | { kind: 'sites' }
@@ -59,12 +58,13 @@ export default function Home() {
   const { theme, scale: fontScale, saveTheme, saveScale: saveFontScale } = useAppearance();
   const history = useHistory();
 
-  // 「現在」只取一次：Date.now 是不純函式，寫在 render 裡會被 React Compiler 擋下，
-  // 而且每張卡各自呼叫也沒意義 —— 同一次渲染本來就該用同一個時間基準
-  const [now] = useState(stamp);
   const [dialog, setDialog] = useState<Dialog>({ kind: 'none' });
-  /** 批次選取：不是 null 就代表在選取模式，內容是選中的 rowNumber */
-  const [picked, setPicked] = useState<number[] | null>(null);
+  /**
+   * 批次選取：不是 null 就代表在選取模式。
+   * 存的是 itemKey（名稱::連結）**不是列號** —— 列號會因為刪除而整批位移，
+   * 拿過期的列號去刪會刪到隔壁那部作品。
+   */
+  const [picked, setPicked] = useState<string[] | null>(null);
 
   /**
    * 排程過期就在背景重抓一次並寫回 Sheet。
@@ -339,7 +339,6 @@ export default function Home() {
                   item={item}
                   gimyDomain={gimyDomain}
                   history={watched.get(historyKey(item))}
-                  now={now}
                   onPlay={handlePlay}
                   onEdit={(it) => setDialog({ kind: 'edit', item: it })}
                   onDelete={(it) => setDialog({ kind: 'delete', item: it })}
@@ -387,7 +386,7 @@ export default function Home() {
                       setPicked(
                         picked.length === library.visible.length
                           ? []
-                          : library.visible.map((it) => it.rowNumber),
+                          : library.visible.map(historyKey),
                       )
                     }
                     className="rounded-full border border-ink-border px-2.5 py-1 text-[11px] text-mist-silver transition hover:border-moon-soft hover:text-moon"
@@ -402,7 +401,7 @@ export default function Home() {
                     結束選取
                   </button>
                   <button
-                    onClick={() => setDialog({ kind: 'bulkDelete', rows: picked })}
+                    onClick={() => setDialog({ kind: 'bulkDelete', keys: picked })}
                     disabled={picked.length === 0}
                     className="rounded-full border border-cinnabar/50 px-2.5 py-1 text-[11px] text-cinnabar transition hover:bg-cinnabar/10 disabled:opacity-40"
                   >
@@ -419,23 +418,22 @@ export default function Home() {
                   item={item}
                   gimyDomain={gimyDomain}
                   history={watched.get(historyKey(item))}
-                  now={now}
-                  onPlay={handlePlay}
+                    onPlay={handlePlay}
                   onEdit={(it) => setDialog({ kind: 'edit', item: it })}
                   onDelete={(it) => setDialog({ kind: 'delete', item: it })}
                   onSetProgress={library.setProgress}
                   onFindName={(it) => setDialog({ kind: 'rename', item: it })}
                   onWhereToRead={(it) => setDialog({ kind: 'whereToRead', item: it })}
                   selectMode={picked !== null}
-                  selected={picked?.includes(item.rowNumber) ?? false}
+                  selected={picked?.includes(historyKey(item)) ?? false}
                   onToggleSelect={(it) =>
-                    setPicked((prev) =>
-                      prev === null
-                        ? prev
-                        : prev.includes(it.rowNumber)
-                          ? prev.filter((r) => r !== it.rowNumber)
-                          : [...prev, it.rowNumber],
-                    )
+                    setPicked((prev) => {
+                      if (prev === null) return prev;
+                      const key = historyKey(it);
+                      return prev.includes(key)
+                        ? prev.filter((k) => k !== key)
+                        : [...prev, key];
+                    })
                   }
                 />
               ))}
@@ -506,10 +504,10 @@ export default function Home() {
       {active.kind === 'bulkDelete' && (
         <ConfirmModal
           title="批次刪除"
-          message={`確定要刪掉選取的 ${active.rows.length} 部嗎？這會一併刪掉 Google Sheets 裡對應的列，沒辦法復原。`}
-          confirmLabel={`刪除 ${active.rows.length} 部`}
+          message={`確定要刪掉選取的 ${active.keys.length} 部嗎？這會一併刪掉 Google Sheets 裡對應的列，沒辦法復原。`}
+          confirmLabel={`刪除 ${active.keys.length} 部`}
           onConfirm={async () => {
-            await library.removeMany(active.rows);
+            await library.removeMany(active.keys);
             setPicked(null);
           }}
           onClose={close}

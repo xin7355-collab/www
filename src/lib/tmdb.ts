@@ -6,22 +6,16 @@ import { SearchResult } from '@/types/search';
  * TMDB（The Movie Database）—— 電影與影集的資料來源。
  *
  * 為什麼值得接：目前電影／影集這半邊只靠 iTunes，中文標題常常缺、
- * 集數也不準。TMDB 有正式的繁中標題與海報、每季集數、首播日，
- * 而且 **watch providers 會告訴你這部在台灣哪個平台上架** ——
- * 這是唯一能合法自動生出「在哪看」的資料來源。
+ * 集數也不準。TMDB 有正式的繁中標題與海報、每季集數、首播日。
  *
  * 需要免費金鑰，CORS 全開所以瀏覽器直接打。金鑰跟 YouTube 那把一樣
  * 存在使用者自己的裝置，不進 bundle。
- *
- * watch providers 的資料來自 JustWatch，TMDB 的條款要求標示出處，
- * 所以顯示時一定要附上 TMDB 提供的 JustWatch 連結。
  */
 
 const BASE = 'https://api.themoviedb.org/3';
 const IMG = 'https://image.tmdb.org/t/p/w342';
 
-/** 台灣的地區碼，用來查在地的上架平台與譯名 */
-const REGION = 'TW';
+/** 要正式的繁中片名，不是英文原名 */
 const LANG = 'zh-TW';
 
 export interface TmdbHit extends SearchResult {
@@ -130,33 +124,3 @@ export async function fetchEpisodeCount(key: string, id: number): Promise<string
     : '';
 }
 
-export interface WatchInfo {
-  /** 在台灣可以訂閱觀看的平台名稱 */
-  flatrate: string[];
-  /** JustWatch 的頁面，TMDB 條款要求標示這個出處 */
-  link: string;
-}
-
-/**
- * 這部在台灣哪個平台上架。
- * 資料由 JustWatch 提供，顯示時必須附上回連的 link。
- */
-export async function fetchWatchProviders(
-  key: string,
-  mediaType: 'movie' | 'tv',
-  id: number,
-): Promise<WatchInfo | null> {
-  const data = (await request(`/${mediaType}/${id}/watch/providers`, key)) as {
-    results?: Record<string, { link?: string; flatrate?: { provider_name?: string }[] }>;
-  };
-
-  const tw = data.results?.[REGION];
-  if (!tw) return null;
-
-  return {
-    flatrate: (tw.flatrate ?? [])
-      .map((p) => p.provider_name ?? '')
-      .filter(Boolean),
-    link: tw.link ?? '',
-  };
-}

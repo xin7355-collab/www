@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import * as api from '@/lib/api';
+import { itemKey } from '@/lib/itemKey';
 import { sheetToItems } from '@/lib/schema';
 import { BEHIND_TAB, episodesBehind } from '@/lib/schedule';
 import { MediaItem, MediaPatch, NewMediaItem, SortKey } from '@/types/media';
@@ -236,20 +237,44 @@ export function useLibrary(account: string) {
 
 
   /**
-   * 批次刪除。**由大到小刪** —— Sheet 刪掉一列會讓後面每一列的列號往前移一位，
-   * 由小到大刪的話第二筆之後全部會刪到隔壁的作品。
+   * 批次刪除。
+   *
+   * **用「名稱::連結」指定要刪誰，不是列號。** 列號會過期 —— 別台裝置刪過
+   * 一列、或先前有一次寫入失敗沒同步，本地記的列號就跟 Sheet 對不上；
+   * 照過期的列號刪會刪到隔壁那部作品，或直接撞上「列號超出範圍」。
+   *
+   * 所以先跟後端對一次答案拿到當下真正的列號，再**由大到小**刪 ——
+   * Sheet 刪掉一列會讓後面每一列往前移一位。
+   * 刪完不自己推算新的列號，一律重抓：後端才是真相。
    */
-  const removeMany = async (rows: number[]) => {
+  const removeMany = async (keys: string[]) => {
+    if (keys.length === 0) return 0;
+
+    setBusy(true);
+    setError('');
     let done = 0;
-    for (const row of [...rows].sort((a, b) => b - a)) {
-      await removeItem(row);
-      done += 1;
+    try {
+      const fresh = sheetToItems(await api.fetchSheet(account));
+      const wanted = new Set(keys);
+      const targets = fresh
+        .filter((it) => wanted.has(itemKey(it)))
+        .map((it) => it.rowNumber)
+        .sort((a, b) => b - a);
+
+      for (const row of targets) {
+        await api.deleteItem(account, row);
+        done += 1;
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '刪除失敗');
+    } finally {
+      await reload(true);
+      setBusy(false);
     }
     return done;
   };
 
   const removeItem = async (row: number) => {
-    const snapshot = items;
     // 刪除會讓後面每一列的 rowNumber 往前移一位，本地要跟著調整，
     // 否則接下來的編輯會寫到錯的列
     setItems((prev) =>
@@ -260,8 +285,9 @@ export function useLibrary(account: string) {
     try {
       await api.deleteItem(account, row);
     } catch (err) {
-      setError(err instanceof Error ? err.message : '刪除失敗，已還原');
-      setItems(snapshot);
+      // 失敗多半是本地列號已經過期，還原一份同樣過期的快照沒有意義，重抓
+      setError(err instanceof Error ? err.message : '刪除失敗，已重新載入');
+      reload(true);
     }
   };
 
