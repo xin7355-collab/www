@@ -1,4 +1,6 @@
+import { searchArchive } from './archive';
 import { searchBangumi } from './bangumi';
+import { searchMangaDex } from './mangadex';
 import { searchTmdb } from './tmdb';
 import { MediaPatch, NewMediaItem } from '@/types/media';
 import { SearchResult } from '@/types/search';
@@ -221,36 +223,44 @@ export async function searchWorks(
   const keyword = q.trim();
   if (!keyword) throw new Error('請輸入要搜尋的關鍵字');
 
-  // 電影與影集才需要 TMDB 與 iTunes；動漫漫畫小說 Bangumi 就夠了
-  const wantFilm = !kind || kind === '電影' || kind === '影集';
   const tmdbKey = keys.tmdbKey?.trim() ?? '';
 
-  const [bangumi, tmdb, apple] = await Promise.allSettled([
+  // TMDB 只補電影與影集
+  const wantFilm = !kind || kind === '電影' || kind === '影集';
+
+  // 後端有兩份資料是瀏覽器拿不到的：iTunes（沒 CORS）與 Google Books。
+  // 前者補電影影集，後者補小說漫畫 —— 兩種分類都要問，不能只看 wantFilm
+  const wantBackend = wantFilm || kind === '小說' || kind === '漫畫';
+
+  // MangaDex 補漫畫的話數（Bangumi 的書籍條目幾乎不填）
+  const wantManga = !kind || kind === '漫畫';
+  // Internet Archive 的結果能拿到影片直鏈，是唯一能站內播又記進度的來源
+  const wantArchive = !kind || kind === '電影';
+
+  const settled = await Promise.allSettled([
+    wantFilm && tmdbKey ? searchTmdb(tmdbKey, keyword, kind) : none(),
     searchBangumi(keyword, kind),
-    wantFilm && tmdbKey ? searchTmdb(tmdbKey, keyword, kind) : Promise.resolve<SearchResult[]>([]),
-    wantFilm ? searchViaBackend(keyword, kind) : Promise.resolve<SearchResult[]>([]),
+    wantManga ? searchMangaDex(keyword) : none(),
+    wantArchive ? searchArchive(keyword) : none(),
+    wantBackend ? searchViaBackend(keyword, kind) : none(),
   ]);
 
-  // TMDB 排在 iTunes 前面：它有正式繁中標題與海報，品質好得多
-  const results = [
-    ...(tmdb.status === 'fulfilled' ? tmdb.value : []),
-    ...(bangumi.status === 'fulfilled' ? bangumi.value : []),
-    ...(apple.status === 'fulfilled' ? apple.value : []),
-  ];
+  // 順序＝品質順序：TMDB 的繁中資料最完整，後端那份（iTunes / Google Books）墊底
+  const results = settled.flatMap((r) => (r.status === 'fulfilled' ? r.value : []));
 
   if (results.length > 0) return results;
 
   // 全都沒結果時，把真正的失敗原因講出來，而不是一句「查無結果」
-  const failure = [tmdb, bangumi, apple].find(
-    (r): r is PromiseRejectedResult => r.status === 'rejected',
-  );
+  const failure = settled.find((r): r is PromiseRejectedResult => r.status === 'rejected');
   if (failure) {
     throw failure.reason instanceof Error ? failure.reason : new ApiError(String(failure.reason));
   }
   throw new ApiError('查無結果，換個關鍵字或改用原文名稱試試');
 }
 
-/** 後端的搜尋（目前只用來補 iTunes 的電影與影集） */
+const none = () => Promise.resolve<SearchResult[]>([]);
+
+/** 後端的搜尋：補瀏覽器拿不到的 iTunes 與 Google Books */
 async function searchViaBackend(q: string, kind: string): Promise<SearchResult[]> {
   const data = await get({ action: 'search', q, kind });
 
@@ -273,8 +283,9 @@ async function searchViaBackend(q: string, kind: string): Promise<SearchResult[]
       url: r.url ?? '',
       source: r.source ?? '',
     }))
-    // 後端在不指定分類時也會問 Bangumi 與 Google Books，那兩份這裡已經有了
-    .filter((r) => r.source === 'Apple' && r.title);
+    // 只濾掉後端那份 Bangumi —— 瀏覽器自己會直打，留著會變成兩份一樣的結果。
+    // Apple 與 Google Books 沒有 CORS，只有後端拿得到，不能丟
+    .filter((r) => r.title && r.source !== 'Bangumi');
 }
 
 // ─── 帳號 ─────────────────────────────────────────────────────

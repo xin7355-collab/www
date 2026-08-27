@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Modal from './Modal';
 import YouTubeSearch from './YouTubeSearch';
 import { searchWorks } from '@/lib/api';
+import { resolveVideoUrl } from '@/lib/archive';
 import { fetchEpisodeCount, fetchWatchProviders } from '@/lib/tmdb';
 import { MAIN_TYPES, NewMediaItem } from '@/types/media';
 import { SearchResult } from '@/types/search';
@@ -47,6 +48,8 @@ export default function SearchModal({
   const [error, setError] = useState('');
   const [results, setResults] = useState<SearchResult[]>([]);
   const [searched, setSearched] = useState(false);
+  /** 正在補查資料的那一筆（用 url 當識別），避免連點兩次 */
+  const [picking, setPicking] = useState('');
 
   const run = async () => {
     const keyword = q.trim();
@@ -98,24 +101,40 @@ export default function SearchModal({
   };
 
   const pick = async (r: SearchResult) => {
-    // 影集的總集數要另外問一次，所以只在真的要加入時才查，不是每筆結果都查
-    let totalEp = r.totalEp;
-    if (!totalEp && tmdbKey && r.tmdbId && r.mediaType === 'tv') {
-      try {
-        totalEp = await fetchEpisodeCount(tmdbKey, r.tmdbId);
-      } catch {
-        // 查不到就留空，使用者自己填
+    setPicking(r.url);
+    try {
+      // 影集的總集數要另外問一次，所以只在真的要加入時才查，不是每筆結果都查
+      let totalEp = r.totalEp;
+      if (!totalEp && tmdbKey && r.tmdbId && r.mediaType === 'tv') {
+        try {
+          totalEp = await fetchEpisodeCount(tmdbKey, r.tmdbId);
+        } catch {
+          // 查不到就留空，使用者自己填
+        }
       }
-    }
 
-    onPick({
-      title: r.title,
-      cover: r.cover,
-      totalEp,
-      mainType: MAIN_TYPES.includes(r.mainType as (typeof MAIN_TYPES)[number]) ? r.mainType : '',
-      country: r.country,
-      note: r.url ? `資料來源：${r.url}` : '',
-    });
+      // Internet Archive：把詳情頁換成影片直鏈，這樣站內播得起來又能記進度
+      let watchUrl = r.watchUrl ?? '';
+      if (r.archiveId) {
+        try {
+          watchUrl = await resolveVideoUrl(r.archiveId);
+        } catch {
+          // 找不到影片檔就維持詳情頁，至少連結不會壞
+        }
+      }
+
+      onPick({
+        title: r.title,
+        cover: r.cover,
+        totalEp,
+        mainType: MAIN_TYPES.includes(r.mainType as (typeof MAIN_TYPES)[number]) ? r.mainType : '',
+        country: r.country,
+        watchUrl,
+        note: r.url ? `資料來源：${r.url}` : '',
+      });
+    } finally {
+      setPicking('');
+    }
   };
 
   return (
@@ -230,6 +249,11 @@ export default function SearchModal({
                     <span className="rounded border border-ink-border-strong px-1">{r.source}</span>
                     {r.mainType && <span>{r.mainType}</span>}
                     {r.totalEp && <span>{r.totalEp} 集</span>}
+                    {r.archiveId && (
+                      <span className="rounded border border-jade/40 px-1 text-jade">
+                        可站內播・記進度
+                      </span>
+                    )}
                     {r.url && (
                       <a
                         href={r.url}
@@ -270,9 +294,10 @@ export default function SearchModal({
 
                 <button
                   onClick={() => pick(r)}
-                  className="shrink-0 rounded-lg border border-moon-soft/50 px-3 py-1.5 text-xs text-moon transition hover:bg-moon/10"
+                  disabled={picking === r.url}
+                  className="shrink-0 rounded-lg border border-moon-soft/50 px-3 py-1.5 text-xs text-moon transition hover:bg-moon/10 disabled:opacity-40"
                 >
-                  加入
+                  {picking === r.url ? '處理中…' : '加入'}
                 </button>
               </div>
             ))}

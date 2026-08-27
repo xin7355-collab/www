@@ -166,7 +166,12 @@ Browser (Next.js static export)  ──►  Google Apps Script  ──►  Googl
   結果列那個 JustWatch 連結不可以拿掉
 - TMDB 有兩個「延後查」的設計，不要合併成一次抓完：上架平台是搜尋結果
   出來後才補（每部要各問一次），總集數只在按下「加入」時才查（不是每筆都查）
-- **Bangumi 走瀏覽器直打，iTunes 走後端** —— 差別在 CORS：Bangumi 全開，
+- **MangaDex 補漫畫的話數**：Bangumi 的書籍條目幾乎不填話數，等於沒有進度分母。
+  它的中文名常常只在 `altTitles` 裡，主 `title` 只有英日文，兩邊都要找
+- **Internet Archive 是唯一給得出影片直鏈的來源**。搜尋只給詳情頁，
+  按下「加入」時才多打一次 metadata 換成直鏈 —— 拿到直鏈這部片才享有
+  原生播放器的全部能力（記進度、跳片頭、鎖定畫面控制）
+- **Bangumi 走瀏覽器直打，iTunes 與 Google Books 走後端** —— 差別在 CORS：Bangumi 全開，
   iTunes 不給標頭。加新來源前先確認它給不給 CORS，決定放哪一邊
 - 送出前必須 `toSimplified()`：Bangumi 是簡體站，繁體關鍵字碰到字形差異大的字
   （鑽/钻、靈/灵）會完全搜不到
@@ -175,8 +180,10 @@ Browser (Next.js static export)  ──►  Google Apps Script  ──►  Googl
   （實測「鑽石王牌」變成「锅石王牌」）。已改成先 `Array.from` 切字元再建表
 - Bangumi 的相關度排序會把廣播劇、畫集排在本篇前面，所以再依
   「動畫 → 劇集 → 書籍」分層，同層維持原名次
-- 兩條路用 `Promise.allSettled`：舊版 GAS 不認得 `search` 必定失敗，
-  但那不該把 Bangumi 的結果一起拖死
+- 五個來源用 `Promise.allSettled`：舊版 GAS 不認得 `search` 必定失敗，
+  但那不該把其他來源的結果一起拖死。**後端那份要濾掉 `source === 'Bangumi'`**
+  —— 瀏覽器自己會直打，不濾會出現兩份一樣的結果；但 Apple 與 Google Books
+  沒有 CORS，只有後端拿得到，**不可以一起濾掉**（曾經犯過這個錯，小說搜不到東西）
 
 ### 播出排程（TVmaze）
 
