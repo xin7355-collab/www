@@ -16,15 +16,7 @@ import { useAccounts } from '@/hooks/useAccounts';
 import { useLibrary } from '@/hooks/useLibrary';
 import { useSettings } from '@/hooks/useSettings';
 import { historyKey, indexHistory, useHistory } from '@/lib/history';
-import {
-  isStale,
-  readSchedules,
-  saveSchedule,
-  scheduleKey,
-  signature,
-  titleFromKey,
-  useSchedules,
-} from '@/lib/schedule';
+import { needsRefresh } from '@/lib/schedule';
 import { fetchSchedule } from '@/lib/tvmaze';
 import { clearShared, useSharedInput } from '@/lib/quickAdd';
 import { useShortcuts } from '@/lib/shortcuts';
@@ -60,7 +52,6 @@ export default function Home() {
   const shortcuts = useShortcuts();
   const shared = useSharedInput();
   const history = useHistory();
-  const schedules = useSchedules();
 
   // 「現在」只取一次：Date.now 是不純函式，寫在 render 裡會被 React Compiler 擋下，
   // 而且每張卡各自呼叫也沒意義 —— 同一次渲染本來就該用同一個時間基準
@@ -68,30 +59,53 @@ export default function Home() {
   const [dialog, setDialog] = useState<Dialog>({ kind: 'none' });
 
   /**
-   * 排程過期就在背景重抓。播出表一天變不了幾次，所以只在超過 12 小時才動。
-   * 作品名稱從鍵裡取回來（鍵是「名稱::連結」），這樣 effect 就不必相依整份片庫。
+   * 排程過期就在背景重抓一次並寫回 Sheet。
+   *
+   * 正常情況下 Apps Script 的每日觸發器會先一步更新好，這裡是給
+   * 「還沒裝觸發器」或「剛好在觸發器跑之前打開」的補救。
+   * 判斷依據是「下一集是不是已經播了」而不是時間戳 —— 播出表在下一集
+   * 播出之前不會變，用時間輪詢只是白打 API。
+   *
+   * 一次最多處理 3 筆：每筆都會寫回 Sheet，一次全送會塞爆後端。
    *
    * 位置很重要：必須在下面那幾個 early return **之前** ——
    * hooks 的呼叫順序每次 render 都得一樣。
    */
-  const refreshing = useRef(new Set<string>());
-  const scheduleSignature = signature(schedules);
+  const refreshing = useRef(new Set<number>());
+  const stale = library.items.filter((it) => needsRefresh(it)).slice(0, 3);
+  const staleSignature = stale.map((it) => `${it.rowNumber}#${it.tvmazeId}`).join('|');
+  const patchItem = library.patchItem;
+
   useEffect(() => {
-    const at = stamp();
+    if (!staleSignature) return;
     const inFlight = refreshing.current;
 
-    for (const [key, binding] of Object.entries(readSchedules())) {
-      if (!isStale(binding, at) || inFlight.has(key)) continue;
+    for (const entry of staleSignature.split('|')) {
+      const [rowText, showId] = entry.split('#');
+      const row = Number(rowText);
+      if (!showId || inFlight.has(row)) continue;
 
-      inFlight.add(key);
-      fetchSchedule(binding.showId, titleFromKey(key))
-        .then((schedule) => saveSchedule(key, schedule, stamp()))
+      inFlight.add(row);
+      fetchSchedule(Number(showId), titleOf(row))
+        .then((schedule) =>
+          patchItem(row, {
+            airedEp: String(schedule.aired),
+            nextAirDate: schedule.nextDate,
+            nextEpLabel: schedule.nextLabel,
+          }),
+        )
         .catch(() => {
           // 抓不到就維持舊資料，下次進來再試 —— 不值得為此打斷使用者
         })
-        .finally(() => inFlight.delete(key));
+        .finally(() => inFlight.delete(row));
     }
-  }, [scheduleSignature]);
+
+    /** 從列號取回作品名稱：季別判斷要用它，但不想讓 effect 相依整份片庫 */
+    function titleOf(row: number): string {
+      return stale.find((it) => it.rowNumber === row)?.title ?? '';
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [staleSignature, patchItem]);
 
 
   const close = () => {
@@ -345,7 +359,6 @@ export default function Home() {
                   gimyDomain={gimyDomain}
                   history={watched.get(historyKey(item))}
                   now={now}
-                  binding={schedules[scheduleKey(item)]}
                   onPlay={handlePlay}
                   onEdit={(it) => setDialog({ kind: 'edit', item: it })}
                   onDelete={(it) => setDialog({ kind: 'delete', item: it })}
@@ -383,7 +396,6 @@ export default function Home() {
                 gimyDomain={gimyDomain}
                 history={watched.get(historyKey(item))}
                 now={now}
-                binding={schedules[scheduleKey(item)]}
                 onPlay={handlePlay}
                 onEdit={(it) => setDialog({ kind: 'edit', item: it })}
                 onDelete={(it) => setDialog({ kind: 'delete', item: it })}
@@ -397,14 +409,24 @@ export default function Home() {
       {/* Dialogs */}
       {(active.kind === 'add' || active.kind === 'edit') && (
         <ItemForm
-          initial={active.kind === 'edit' ? active.item : undefined}
+          // 綁定排程會就地改動這筆，所以要取片庫裡最新的那份 ——
+          // 用開啟表單當下的快照，綁完之後畫面不會更新（播放器也是同一個理由）
+          initial={
+            active.kind === 'edit'
+              ? (library.items.find((it) => it.rowNumber === active.item.rowNumber) ?? active.item)
+              : undefined
+          }
           prefill={active.kind === 'add' ? active.prefill : undefined}
           gimyDomain={gimyDomain}
           busy={library.busy}
           onSubmit={handleSubmit}
           onClose={close}
           onBulk={active.kind === 'add' ? (text) => setDialog({ kind: 'bulk', text }) : undefined}
-          binding={active.kind === 'edit' ? schedules[scheduleKey(active.item)] : undefined}
+          onPatch={
+            active.kind === 'edit'
+              ? (fields) => library.patchItem(active.item.rowNumber, fields)
+              : undefined
+          }
         />
       )}
 

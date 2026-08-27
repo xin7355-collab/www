@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Modal from './Modal';
-import { maskedUrl, probe, Probe } from '@/lib/api';
+import { installDailyTrigger, maskedUrl, probe, Probe, refreshSchedulesNow } from '@/lib/api';
 import { downloadBackup, parseBackup } from '@/lib/backup';
 import { addShortcut, removeShortcut, SiteShortcut } from '@/lib/shortcuts';
 import { DEFAULT_GIMY_DOMAIN } from '@/lib/watchUrl';
@@ -50,6 +50,20 @@ export default function SettingsModal({
   const [importMsg, setImportMsg] = useState('');
   const [ytKey, setYtKey] = useState(youtubeKey);
   const [tmdb, setTmdb] = useState(tmdbKey);
+  const [triggerMsg, setTriggerMsg] = useState('');
+  const [triggerBusy, setTriggerBusy] = useState(false);
+
+  const runTrigger = async (action: () => Promise<string>) => {
+    setTriggerBusy(true);
+    setTriggerMsg('');
+    try {
+      setTriggerMsg(await action());
+    } catch (err) {
+      setTriggerMsg(err instanceof Error ? err.message : '操作失敗');
+    } finally {
+      setTriggerBusy(false);
+    }
+  };
 
   const handleImport = async (file: File | undefined) => {
     if (!file) return;
@@ -307,6 +321,36 @@ export default function SettingsModal({
           >
             {copied ? '已複製 —— 貼進新書籤的網址欄即可' : '複製書籤小工具程式碼'}
           </button>
+        </section>
+
+        <section className="border-t border-ink-border pt-5">
+          <h3 className="mb-1 text-sm text-mist">每日排程更新</h3>
+          <p className="mb-2.5 text-[11px] leading-relaxed text-mist-shadow">
+            裝了之後，後端每天早上 8 點會自己去 TVmaze 更新已播集數與下一集日期，
+            寫進試算表。<span className="text-mist-silver">所有裝置都會看到同一份</span>，
+            開 App 時也不用等 API。裝一次就好。
+          </p>
+          <div className="flex gap-2">
+            <button
+              onClick={() => runTrigger(installDailyTrigger)}
+              disabled={triggerBusy}
+              className="flex-1 rounded-lg border border-ink-border-strong py-2 text-xs text-mist-silver transition hover:border-moon-soft hover:text-moon disabled:opacity-40"
+            >
+              安裝每日更新
+            </button>
+            <button
+              onClick={() => runTrigger(refreshSchedulesNow)}
+              disabled={triggerBusy}
+              className="flex-1 rounded-lg border border-ink-border-strong py-2 text-xs text-mist-silver transition hover:border-moon-soft hover:text-moon disabled:opacity-40"
+            >
+              立刻更新一次
+            </button>
+          </div>
+          {(triggerBusy || triggerMsg) && (
+            <p className="mt-2 text-[11px] leading-relaxed text-mist-silver">
+              {triggerBusy ? '執行中…' : triggerMsg}
+            </p>
+          )}
         </section>
 
         <section className="border-t border-ink-border pt-5">

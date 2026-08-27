@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { formatAgo, formatClock, HistoryEntry } from '@/lib/history';
-import { Binding, formatAirdate } from '@/lib/schedule';
+import { formatAirdate, scheduleFrom } from '@/lib/schedule';
 import { deriveCover, resolveWatch } from '@/lib/watchUrl';
 import { MediaItem } from '@/types/media';
 
@@ -13,8 +13,6 @@ interface Props {
   history?: HistoryEntry;
   /** 由上層一次算好的「現在」，避免每張卡各自呼叫 Date.now */
   now: number;
-  /** 綁定的播出排程，有的話進度分母改用已播集數 */
-  binding?: Binding;
   onPlay: (item: MediaItem) => void;
   onEdit: (item: MediaItem) => void;
   onDelete: (item: MediaItem) => void;
@@ -33,7 +31,6 @@ export default function MediaCard({
   gimyDomain,
   history,
   now,
-  binding,
   onPlay,
   onEdit,
   onDelete,
@@ -51,11 +48,12 @@ export default function MediaCard({
    * 分母優先用「已播集數」：追連載時想知道的是離最新一集差幾集，
    * 而不是離完結差幾集。沒綁排程才退回自己填的總集數。
    */
-  const aired = binding?.schedule?.aired ?? 0;
+  const schedule = scheduleFrom(item);
+  const aired = schedule?.aired ?? 0;
   const total = aired > 0 ? aired : Number.parseInt(item.totalEp.replace(/[^\d]/g, ''), 10) || 0;
   const percent = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : 0;
   const caughtUp = aired > 0 && done >= aired;
-  const next = binding?.schedule?.nextDate ?? '';
+  const next = schedule?.nextDate ?? '';
 
   // 自己填的封面優先；沒填就看能不能從連結推一張出來（YouTube 等）
   const cover = item.cover || deriveCover(item.watchUrl);
@@ -164,7 +162,7 @@ export default function MediaCard({
             {next && (
               <span>
                 下一集 <span className="text-moon">{formatAirdate(next)}</span>
-                {binding?.schedule?.nextLabel ? ` ${binding.schedule.nextLabel}` : ''}
+                {schedule?.nextLabel ? ` ${schedule.nextLabel}` : ''}
               </span>
             )}
             {caughtUp && !next && <span className="text-jade">最新一集</span>}

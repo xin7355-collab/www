@@ -9,6 +9,7 @@ import {
   withDurations,
   YouTubeVideo,
 } from '@/lib/youtube';
+import { emptyItem } from '@/lib/schema';
 import { NewMediaItem } from '@/types/media';
 
 interface Props {
@@ -22,20 +23,12 @@ interface Props {
 
 function toItem(video: YouTubeVideo): NewMediaItem {
   return {
+    ...emptyItem(),
     title: video.title,
-    progress: '0',
-    totalEp: '',
-    mainType: '',
-    country: '',
-    status: '未觀看',
-    rating: '',
     platform: 'YouTube',
     watchUrl: watchUrlFor(video.id),
     cover: video.thumb,
-    season: '',
-    genre: '',
     note: video.channel ? `頻道：${video.channel}` : '',
-    addedDate: '',
   };
 }
 

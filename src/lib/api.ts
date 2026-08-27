@@ -288,6 +288,37 @@ async function searchViaBackend(q: string, kind: string): Promise<SearchResult[]
     .filter((r) => r.title && r.source !== 'Bangumi');
 }
 
+// ─── 排程觸發器 ───────────────────────────────────────────────
+
+/**
+ * 請後端安裝「每天早上更新播出排程」的觸發器。
+ *
+ * 為什麼放在 App 裡而不是叫使用者去 Apps Script 後台按：那個後台介面
+ * 不好找，而且裝一次就好的事不該變成一份操作手冊。
+ */
+export async function installDailyTrigger(): Promise<string> {
+  const data = await get({ action: 'setupTrigger' });
+  if (Array.isArray(data)) {
+    throw new ApiError(
+      '後端腳本是舊版，還沒有排程更新功能。請貼上新版 apps-script-code.gs 並「部署 > 管理部署 > 編輯 > 版本：全新版本」重新發佈。',
+    );
+  }
+  const res = data as { message?: string; removedOld?: number };
+  return res.message ?? '已安裝';
+}
+
+/** 立刻跑一次排程更新，不用等到明天早上 */
+export async function refreshSchedulesNow(): Promise<string> {
+  const data = await get({ action: 'refreshSchedules' });
+  if (Array.isArray(data)) {
+    throw new ApiError(
+      '後端腳本是舊版，還沒有排程更新功能。請貼上新版 apps-script-code.gs 並重新部署。',
+    );
+  }
+  const res = data as { scanned?: number; updated?: number };
+  return `掃描 ${res.scanned ?? 0} 筆，更新 ${res.updated ?? 0} 筆`;
+}
+
 // ─── 帳號 ─────────────────────────────────────────────────────
 
 export async function fetchAccounts(): Promise<string[]> {

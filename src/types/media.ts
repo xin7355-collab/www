@@ -79,6 +79,19 @@ export interface MediaItem {
   genre: string;
   note: string;
   addedDate: string;
+
+  /**
+   * 以下四欄由 Apps Script 的每日觸發器維護，前端只讀不寫
+   * （綁定當下會寫一次 tvmazeId，之後就交給後端）。
+   * 放進 Sheet 而不是 localStorage 的理由：排程要所有裝置一致，
+   * 在手機綁完換電腦看得到。
+   */
+  tvmazeId: string;
+  /** 到今天為止已播出幾集；拿來當進度分母 */
+  airedEp: string;
+  nextAirDate: string;
+  /** 例：第 188 集（S8E12） */
+  nextEpLabel: string;
 }
 
 /** 新增時可填的欄位（rowNumber 與 updatedAt 由後端產生） */

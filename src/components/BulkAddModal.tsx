@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Modal from './Modal';
+import { emptyItem } from '@/lib/schema';
 import { detectPlatform } from '@/lib/watchUrl';
 import { MAIN_TYPES, NewMediaItem } from '@/types/media';
 
@@ -76,20 +77,11 @@ export default function BulkAddModal({ initialText, busy, onSubmit, onClose }: P
     setStatus(`加入中… 0 / ${rows.length}`);
     const added = await onSubmit(
       rows.map((r) => ({
+        ...emptyItem(),
         title: r.title,
-        progress: '0',
-        totalEp: '',
         mainType,
-        country: '',
-        status: '未觀看',
-        rating: '',
         platform: r.platform,
         watchUrl: r.url,
-        cover: '',
-        season: '',
-        genre: '',
-        note: '',
-        addedDate: '',
       })),
     );
     if (added === rows.length) onClose();

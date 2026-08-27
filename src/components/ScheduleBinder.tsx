@@ -1,17 +1,14 @@
 'use client';
 
 import { useState } from 'react';
-import { Binding, bindShow, formatAirdate, saveSchedule, unbindShow } from '@/lib/schedule';
-import { fetchSchedule, searchShows, ShowHit } from '@/lib/tvmaze';
-
-/** 取現在時間。定義在元件外：Date.now 是不純函式，寫在元件內會被 React Compiler 擋下 */
-const stamp = () => Date.now();
+import { formatAirdate, scheduleFrom } from '@/lib/schedule';
+import { fetchSchedule, searchShows, showUrl, ShowHit } from '@/lib/tvmaze';
+import { MediaItem, MediaPatch } from '@/types/media';
 
 interface Props {
-  /** 這筆作品的排程鍵（名稱＋連結） */
-  itemKey: string;
-  title: string;
-  binding?: Binding;
+  item: MediaItem;
+  /** 寫回 Sheet；排程要跨裝置一致，不能只存在本機 */
+  onPatch: (fields: MediaPatch) => void;
 }
 
 /**
@@ -20,7 +17,10 @@ interface Props {
  * 綁定之後卡片的進度分母會改用「已播集數」，並顯示下一集的日期 ——
  * 追連載作品時真正想知道的是「我離最新一集差幾集」，而不是「離完結差幾集」。
  */
-export default function ScheduleBinder({ itemKey, title, binding }: Props) {
+export default function ScheduleBinder({ item, onPatch }: Props) {
+  const title = item.title;
+  const bound = item.tvmazeId.trim();
+  const schedule = scheduleFrom(item);
   const [hits, setHits] = useState<ShowHit[]>([]);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
@@ -42,27 +42,37 @@ export default function ScheduleBinder({ itemKey, title, binding }: Props) {
   };
 
   const pick = async (hit: ShowHit) => {
-    bindShow(itemKey, { showId: hit.id, showName: hit.name, url: hit.url });
     setHits([]);
     setBusy(true);
     setMessage('');
     try {
-      saveSchedule(itemKey, await fetchSchedule(hit.id, title), stamp());
-    } catch (err) {
-      setMessage(err instanceof Error ? err.message : '排程抓取失敗，稍後會自動重試');
+      const fresh = await fetchSchedule(hit.id, title);
+      onPatch({
+        tvmazeId: String(hit.id),
+        airedEp: String(fresh.aired),
+        nextAirDate: fresh.nextDate,
+        nextEpLabel: fresh.nextLabel,
+      });
+    } catch {
+      // 排程抓不到也先把綁定記起來，後端的每日更新會補上
+      onPatch({ tvmazeId: String(hit.id), airedEp: '', nextAirDate: '', nextEpLabel: '' });
+      setMessage('已綁定，但排程沒抓到 —— 明天的自動更新會補上');
     } finally {
       setBusy(false);
     }
   };
 
-  if (binding) {
-    const s = binding.schedule;
+  const unbind = () =>
+    onPatch({ tvmazeId: '', airedEp: '', nextAirDate: '', nextEpLabel: '' });
+
+  if (bound) {
+    const s = schedule;
     return (
       <div className="rounded-lg border border-ink-border p-2.5">
         <div className="flex items-center gap-2">
-          <span className="flex-1 truncate text-xs text-mist">{binding.showName}</span>
+          <span className="flex-1 truncate text-xs text-mist">TVmaze #{bound}</span>
           <a
-            href={binding.url}
+            href={showUrl(Number(bound))}
             target="_blank"
             rel="noopener noreferrer"
             className="shrink-0 text-[10px] text-mist-shadow underline-offset-2 hover:text-moon hover:underline"
@@ -71,7 +81,7 @@ export default function ScheduleBinder({ itemKey, title, binding }: Props) {
           </a>
           <button
             type="button"
-            onClick={() => unbindShow(itemKey)}
+            onClick={unbind}
             className="shrink-0 text-[10px] text-mist-shadow transition hover:text-cinnabar"
           >
             解除
@@ -82,7 +92,7 @@ export default function ScheduleBinder({ itemKey, title, binding }: Props) {
           {busy && '抓取排程中…'}
           {!busy && s && (
             <>
-              已播 {s.aired} 集{s.seasonTotal > 0 && ` / 本季排定 ${s.seasonTotal} 集`}
+              已播 {s.aired} 集
               {s.nextDate && ` ・ 下一集 ${formatAirdate(s.nextDate)} ${s.nextLabel}`}
               {!s.nextDate && ' ・ 沒有排定中的下一集'}
             </>

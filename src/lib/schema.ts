@@ -1,4 +1,4 @@
-import { MediaItem, STATUSES } from '@/types/media';
+import { MediaItem, NewMediaItem, STATUSES } from '@/types/media';
 
 /**
  * Sheet A–O 欄對應到 MediaItem 的欄位順序。
@@ -20,7 +20,29 @@ export const COLUMN_ORDER = [
   'genre',
   'note',
   'addedDate',
+  'tvmazeId',
+  'airedEp',
+  'nextAirDate',
+  'nextEpLabel',
 ] as const satisfies readonly (keyof MediaItem)[];
+
+/**
+ * 空白的一筆。
+ *
+ * 有三個地方需要「從零建一筆」（新增表單、批次加入、YouTube 搜尋），
+ * 各自手寫的話，欄位一增減就有人漏掉。從 COLUMN_ORDER 生出來，
+ * 改 schema 時這裡自動跟上。
+ */
+export function emptyItem(): NewMediaItem {
+  const item = {} as NewMediaItem;
+  for (const key of COLUMN_ORDER) {
+    if (key === 'updatedAt') continue;
+    item[key] = '';
+  }
+  item.progress = '0';
+  item.status = STATUSES[0];
+  return item;
+}
 
 const cell = (raw: unknown[], index: number): string => {
   const v = raw[index];

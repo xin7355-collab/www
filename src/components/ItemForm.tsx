@@ -4,13 +4,14 @@ import { useState } from 'react';
 import Modal from './Modal';
 import ScheduleBinder from './ScheduleBinder';
 import { fetchMeta } from '@/lib/api';
-import { Binding, scheduleKey } from '@/lib/schedule';
+import { emptyItem } from '@/lib/schema';
 import { describeUrl, detectPlatform } from '@/lib/watchUrl';
 import {
   COUNTRIES,
   GENRES,
   MAIN_TYPES,
   MediaItem,
+  MediaPatch,
   NewMediaItem,
   PLATFORMS,
   STATUSES,
@@ -27,26 +28,11 @@ interface Props {
   onClose: () => void;
   /** 只有新增模式給：切換到批次加入，可帶預先填好的內容 */
   onBulk?: (prefillText?: string) => void;
-  /** 這筆已綁定的播出排程，只有編輯模式會有 */
-  binding?: Binding;
+  /** 編輯模式才給：把排程綁定寫回 Sheet */
+  onPatch?: (fields: MediaPatch) => void;
 }
 
-const blank = (): NewMediaItem => ({
-  title: '',
-  progress: '0',
-  totalEp: '',
-  mainType: '',
-  country: '',
-  status: '未觀看',
-  rating: '',
-  platform: '',
-  watchUrl: '',
-  cover: '',
-  season: '',
-  genre: '',
-  note: '',
-  addedDate: '',
-});
+
 
 function Label({ children }: { children: React.ReactNode }) {
   return <span className="mb-1 block text-[11px] tracking-wider text-mist-shadow">{children}</span>;
@@ -60,14 +46,14 @@ export default function ItemForm({
   onSubmit,
   onClose,
   onBulk,
-  binding,
+  onPatch,
 }: Props) {
   const [form, setForm] = useState<NewMediaItem>(() => {
     if (!initial) {
       const { url, ...rest } = prefill ?? {};
       const watchUrl = (url ?? rest.watchUrl ?? '').trim();
       return {
-        ...blank(),
+        ...emptyItem(),
         ...rest,
         title: (rest.title ?? '').trim(),
         watchUrl,
@@ -199,18 +185,14 @@ export default function ItemForm({
           />
         </div>
 
-        {initial && (
+        {initial && onPatch && (
           <div>
             <Label>播出排程</Label>
             <p className="mb-1.5 text-[11px] leading-relaxed text-mist-shadow">
               綁定後進度分母改用「已播集數」，並顯示下一集日期 ——
               追連載時真正想知道的是離最新一集差幾集。
             </p>
-            <ScheduleBinder
-              itemKey={scheduleKey({ title: initial.title, watchUrl: initial.watchUrl })}
-              title={initial.title}
-              binding={binding}
-            />
+            <ScheduleBinder item={initial} onPatch={onPatch} />
           </div>
         )}
 

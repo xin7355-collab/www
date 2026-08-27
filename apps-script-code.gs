@@ -28,7 +28,12 @@ var HEADERS = [
   '季別',         // L 12  season
   '類別',         // M 13  genre
   '備註',         // N 14  note
-  '加入日期'      // O 15  addedDate
+  '加入日期',     // O 15  addedDate
+  // 以下四欄由每日觸發器自動維護，手動改了也會被下次更新蓋掉
+  '排程ID',       // P 16  tvmazeId    綁定的 TVmaze 作品 ID
+  '已播集數',     // Q 17  airedEp     到今天為止已播出幾集
+  '下一集日期',   // R 18  nextAirDate YYYY-MM-DD
+  '下一集集數'    // S 19  nextEpLabel 例：第 188 集（S8E12）
 ];
 
 var COL_COUNT = HEADERS.length;
@@ -48,7 +53,11 @@ var FIELD_COLUMN = {
   season: 12,
   genre: 13,
   note: 14,
-  addedDate: 15
+  addedDate: 15,
+  tvmazeId: 16,
+  airedEp: 17,
+  nextAirDate: 18,
+  nextEpLabel: 19
 };
 
 // ─── 路由 ─────────────────────────────────────────────────────
@@ -68,6 +77,15 @@ function doGet(e) {
 
     if (action === 'search') {
       return response(searchWorks(e.parameter.q, e.parameter.kind));
+    }
+
+    // 手動觸發一次排程更新，方便在後台驗證觸發器裝好了沒
+    if (action === 'refreshSchedules') {
+      return response(refreshSchedules());
+    }
+
+    if (action === 'setupTrigger') {
+      return response(setupDailyTrigger());
     }
 
     var sheetName = (e && e.parameter && e.parameter.sheet) ? e.parameter.sheet : null;
@@ -476,6 +494,160 @@ function getJson(url) {
   } catch (err) {
     return null;
   }
+}
+
+// ─── 播出排程（每日自動更新）──────────────────────────────────
+//
+// 前端也能自己打 TVmaze，但那是 per-device 的：在手機綁了排程，
+// 換到電腦就看不到。把綁定與結果寫進 Sheet，加上每天跑一次的觸發器，
+// 才會所有裝置一致，而且開 App 時不必等 API。
+//
+// TVmaze 免金鑰、CC BY-SA。前端顯示時保留了回連作品頁的出處連結。
+
+var TVMAZE = 'https://api.tvmaze.com';
+
+/**
+ * 掃過所有帳號分頁，把有綁 TVmaze ID 的列更新一次。
+ * 由每日觸發器呼叫，也可以用 ?action=refreshSchedules 手動跑。
+ */
+function refreshSchedules() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheets = ss.getSheets();
+  var today = today8().replace(/\//g, '-'); // YYYY-MM-DD，與 airdate 同格式
+  var scanned = 0;
+  var updated = 0;
+
+  // 同一個 show 可能被多個帳號綁，抓過就不要再抓
+  var cache = {};
+
+  for (var i = 0; i < sheets.length; i++) {
+    var sheet = sheets[i];
+    var lastRow = sheet.getLastRow();
+    if (lastRow < 2) continue;
+
+    var rows = sheet.getRange(2, 1, lastRow - 1, COL_COUNT).getValues();
+
+    for (var r = 0; r < rows.length; r++) {
+      var showId = String(rows[r][FIELD_COLUMN.tvmazeId - 1] || '').trim();
+      if (!showId) continue;
+
+      scanned++;
+      var name = String(rows[r][FIELD_COLUMN.title - 1] || '');
+
+      if (!cache[showId]) cache[showId] = fetchEpisodes(showId);
+      var episodes = cache[showId];
+      if (!episodes) continue;
+
+      var schedule = buildSchedule(name, episodes, today);
+      var target = sheet.getRange(r + 2, FIELD_COLUMN.airedEp, 1, 3);
+
+      // 值沒變就不要寫，省下配額也避免每天都動到「最後更新時間」
+      var current = target.getValues()[0];
+      if (
+        String(current[0]) === String(schedule.aired) &&
+        String(current[1]) === schedule.nextDate &&
+        String(current[2]) === schedule.nextLabel
+      ) {
+        continue;
+      }
+
+      target.setValues([[schedule.aired, schedule.nextDate, schedule.nextLabel]]);
+      updated++;
+    }
+  }
+
+  return { success: true, scanned: scanned, updated: updated, today: today };
+}
+
+function fetchEpisodes(showId) {
+  var data = getJson(TVMAZE + '/shows/' + encodeURIComponent(showId) + '/episodes');
+  return data && data.length ? data : null;
+}
+
+/**
+ * 這段邏輯必須與 src/lib/tvmaze.ts 的 buildSchedule 一致 ——
+ * 兩邊算出不同的集數會讓畫面在「前端剛算完」與「後端隔天更新」之間跳動。
+ *
+ * 已播集數只數播出日在今天以前的：TVmaze 連已公布但還沒播的都收，
+ * 拿清單長度當分母會憑空多出幾集。
+ * 下一集的集數用清單位置換算成絕對集數，因為使用者記的是「第 188 集」，
+ * TVmaze 標的是 S8E12。
+ */
+function buildSchedule(name, episodes, today) {
+  var pool = seasonPool(name, episodes);
+
+  var aired = 0;
+  var nextIndex = -1;
+  for (var i = 0; i < pool.length; i++) {
+    var airdate = String(pool[i].airdate || '');
+    if (airdate && airdate <= today) {
+      aired++;
+    } else if (airdate && nextIndex < 0) {
+      nextIndex = i;
+    }
+  }
+
+  if (nextIndex < 0) return { aired: aired, nextDate: '', nextLabel: '' };
+
+  var next = pool[nextIndex];
+  var seasons = {};
+  for (var j = 0; j < pool.length; j++) seasons[pool[j].season] = true;
+  var multiSeason = Object.keys(seasons).length > 1;
+
+  return {
+    aired: aired,
+    nextDate: String(next.airdate || ''),
+    nextLabel: multiSeason
+      ? '第 ' + (nextIndex + 1) + ' 集（S' + next.season + 'E' + next.number + '）'
+      : '第 ' + (nextIndex + 1) + ' 集'
+  };
+}
+
+/** 名稱有寫「第四季」就只算那一季；對不上 TVmaze 的季別時退回整部，不硬猜 */
+function seasonPool(name, episodes) {
+  var season = parseSeason(name);
+  if (season <= 0) return episodes;
+
+  var filtered = [];
+  for (var i = 0; i < episodes.length; i++) {
+    if (Number(episodes[i].season) === season) filtered.push(episodes[i]);
+  }
+  return filtered.length > 0 ? filtered : episodes;
+}
+
+function parseSeason(name) {
+  var match = String(name).match(/第\s*([0-9]+|[一二三四五六七八九十]+)\s*季/);
+  if (!match) return 0;
+
+  var raw = match[1];
+  if (/^[0-9]+$/.test(raw)) return parseInt(raw, 10);
+
+  var digits = '零一二三四五六七八九';
+  if (raw === '十') return 10;
+  if (raw.length === 2 && raw.charAt(0) === '十') return 10 + digits.indexOf(raw.charAt(1));
+  if (raw.length === 2 && raw.charAt(1) === '十') return digits.indexOf(raw.charAt(0)) * 10;
+  if (raw.length === 3 && raw.charAt(1) === '十') {
+    return digits.indexOf(raw.charAt(0)) * 10 + digits.indexOf(raw.charAt(2));
+  }
+  return Math.max(0, digits.indexOf(raw));
+}
+
+/**
+ * 安裝每天早上 8 點跑一次的觸發器。
+ * 先刪掉舊的同名觸發器，避免重複執行後越裝越多。
+ */
+function setupDailyTrigger() {
+  var existing = ScriptApp.getProjectTriggers();
+  var removed = 0;
+  for (var i = 0; i < existing.length; i++) {
+    if (existing[i].getHandlerFunction() === 'refreshSchedules') {
+      ScriptApp.deleteTrigger(existing[i]);
+      removed++;
+    }
+  }
+
+  ScriptApp.newTrigger('refreshSchedules').timeBased().everyDays(1).atHour(8).create();
+  return { success: true, removedOld: removed, message: '已安裝每天早上 8 點的排程更新' };
 }
 
 // ─── 作品搜尋 ─────────────────────────────────────────────────

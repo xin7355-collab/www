@@ -302,7 +302,7 @@ npm run lint    # ESLint —— 本專案唯一的自動化檢查
 
 ## 資料 schema
 
-每個帳號分頁固定 15 欄，第 1 列為凍結表頭：
+每個帳號分頁固定 19 欄，第 1 列為凍結表頭：
 
 | 欄 | 名稱 | 欄位 |
 |---|---|---|
@@ -321,6 +321,13 @@ npm run lint    # ESLint —— 本專案唯一的自動化檢查
 | M | 類別 | `genre` |
 | N | 備註 | `note` |
 | O | 加入日期 | `addedDate` |
+| P | 排程ID | `tvmazeId` |
+| Q | 已播集數 | `airedEp` |
+| R | 下一集日期 | `nextAirDate` |
+| S | 下一集集數 | `nextEpLabel` |
+
+P–S 四欄由 Apps Script 的每日觸發器維護（設定裡按「安裝每日更新」裝一次即可），
+所以播出排程在所有裝置上都一致，開 App 時也不用等 API。
 
 改動欄位順序會同時破壞 `apps-script-code.gs` 的 `HEADERS`/`FIELD_COLUMN` 與 `src/lib/schema.ts` 的 `COLUMN_ORDER`，三處必須一起改。
 

@@ -49,12 +49,20 @@ Browser (Next.js static export)  ──►  Google Apps Script  ──►  Googl
    `NEXT_PUBLIC_APPS_SCRIPT_URL`：`GET ?action=getSheets|getData&sheet=` 與
    `POST` body `{action, sheet, ...}`。
 
-2. **Google Sheets 當資料庫**：一個「帳號」= 一張分頁，固定 15 欄（A–O）。
+2. **Google Sheets 當資料庫**：一個「帳號」= 一張分頁，固定 19 欄（A–S）。
+   P–S 四欄（排程ID / 已播集數 / 下一集日期 / 下一集集數）由**後端的每日觸發器**維護，
+   前端只在綁定當下寫一次 `tvmazeId`。
    `rowNumber`（實際列號，從 2 起算）是所有更新的唯一定位鍵，比名稱比對可靠。
    欄位順序定義在三個地方，**改一處必須三處一起改**：
    - `apps-script-code.gs` 的 `HEADERS` 與 `FIELD_COLUMN`
    - `src/lib/schema.ts` 的 `COLUMN_ORDER`
    - `src/types/media.ts` 的 `MediaItem`
+
+   建立空白一筆一律用 `schema.ts` 的 `emptyItem()`，不要各自手寫物件字面值 ——
+   加欄位時會有人漏掉（新增表單、批次加入、YouTube 搜尋都用它）。
+
+   **會就地改動資料的 modal 要取片庫裡最新的那筆**，不能用開啟當下的快照：
+   編輯表單與播放器都踩過這個 —— 綁定排程或按進度 +1 之後畫面不會更新。
 
 3. **這是連結目錄，不是媒體伺服器**。不存影片檔，只存 `watchUrl`。
    `src/lib/watchUrl.ts` 的 `resolveWatch()` 是核心：在**渲染時**判斷連結型別，
@@ -198,8 +206,13 @@ Browser (Next.js static export)  ──►  Google Apps Script  ──►  Googl
   拿那個當分母會憑空多出幾集。進度條要回答的是「離最新一集差幾集」
 - 下一集的集數用**清單位置**換算成絕對集數：使用者記的是「第 188 集」，
   TVmaze 標的是 S8E12
-- 綁定與排程存 localStorage（`src/lib/schedule.ts`），因為那是隨時可重抓的衍生資料，
-  而 Sheet 的 15 欄是固定 schema，為它加欄位要同時改三個檔案
+- **綁定與排程存 Sheet 的 P–S 欄，不是 localStorage**：原本存本機，
+  但那是 per-device 的 —— 在手機綁完換電腦什麼都看不到
+- `refreshSchedules()` 由**每天早上 8 點的觸發器**呼叫（設定裡有一鍵安裝）。
+  它的 `buildSchedule` 必須與 `src/lib/tvmaze.ts` 那份算出相同結果，
+  否則畫面會在「前端剛算完」與「後端隔天更新」之間跳動
+- 前端仍保留一次補救性的重抓，**判斷依據是「下一集是不是已經播了」而不是時間戳** ——
+  播出表在下一集播出前不會變，用時間輪詢只是白打 API
 - 背景更新的 effect **相依的是字串簽章**而不是整包物件 ——
   那個物件每次 render 都是新的，放進相依陣列會無限重跑
 
