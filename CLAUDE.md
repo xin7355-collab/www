@@ -150,6 +150,16 @@ Browser (Next.js static export)  ──►  Google Apps Script  ──►  Googl
 
 ### 搜尋
 
+搜尋視窗有兩個分頁，解決的是不同問題：
+- **作品資料** —— 查作品本身（名稱、封面、集數），**不含能播的連結**
+- **YouTube 影片** —— 查實際的影片，加入時連 `watchUrl` 一起帶進去
+
+**YouTube 走 Data API v3，金鑰存 localStorage 不進 bundle**。
+靜態站沒有伺服器可以藏東西，寫進建置變數等於公開給所有人用使用者的額度。
+爬 YouTube 搜尋頁不是可行的替代 —— 跨域擋掉、HTML 動態產生、也違反 ToS。
+額度成本：search 100 單位、videos 與 playlistItems 各 1 單位（每天 10,000）。
+所以搜尋結果的長度是**第二次請求**補上的，不要為了省一次請求把它拿掉。
+
 - **Bangumi 走瀏覽器直打，iTunes 走後端** —— 差別在 CORS：Bangumi 全開，
   iTunes 不給標頭。加新來源前先確認它給不給 CORS，決定放哪一邊
 - 送出前必須 `toSimplified()`：Bangumi 是簡體站，繁體關鍵字碰到字形差異大的字

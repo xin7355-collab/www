@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Modal from './Modal';
+import YouTubeSearch from './YouTubeSearch';
 import { searchWorks } from '@/lib/api';
 import { MAIN_TYPES, NewMediaItem } from '@/types/media';
 import { SearchResult } from '@/types/search';
@@ -9,6 +10,9 @@ import { SearchResult } from '@/types/search';
 interface Props {
   onPick: (prefill: Partial<NewMediaItem>) => void;
   onClose: () => void;
+  youtubeKey: string;
+  onImport: (items: NewMediaItem[]) => Promise<number>;
+  onOpenSettings: () => void;
 }
 
 /** 可搜尋的分類 —— 綜藝沒有合適的公開資料來源，不放進來假裝有 */
@@ -21,7 +25,19 @@ const KINDS = ['電影', '影集', '動漫', '漫畫', '小說'] as const;
  * （名稱、封面、集數），不是觀看連結 —— 連結還是要你自己貼，
  * 因為每個人能看的平台不一樣。
  */
-export default function SearchModal({ onPick, onClose }: Props) {
+export default function SearchModal({
+  onPick,
+  onClose,
+  youtubeKey,
+  onImport,
+  onOpenSettings,
+}: Props) {
+  /**
+   * 兩種搜尋解決的是不同問題：
+   * 「作品資料」查的是作品本身（名稱、封面、集數），不含能播的連結；
+   * 「YouTube」查的是實際的影片，加入時連觀看連結一起帶進去。
+   */
+  const [tab, setTab] = useState<'works' | 'youtube'>('works');
   const [q, setQ] = useState('');
   const [kind, setKind] = useState('');
   const [busy, setBusy] = useState(false);
@@ -58,7 +74,34 @@ export default function SearchModal({ onPick, onClose }: Props) {
   };
 
   return (
-    <Modal title="搜尋作品" onClose={onClose}>
+    <Modal title="搜尋" onClose={onClose}>
+      <div className="mb-4 flex gap-1.5">
+        {([
+          ['works', '作品資料'],
+          ['youtube', 'YouTube 影片'],
+        ] as const).map(([value, label]) => (
+          <button
+            key={value}
+            onClick={() => setTab(value)}
+            className={`rounded-full border px-3 py-1 text-xs transition ${
+              tab === value
+                ? 'border-moon-soft bg-moon/10 text-moon'
+                : 'border-ink-border text-mist-silver hover:border-moon-soft hover:text-moon'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'youtube' ? (
+        <YouTubeSearch
+          apiKey={youtubeKey}
+          onPick={onPick}
+          onImport={onImport}
+          onOpenSettings={onOpenSettings}
+        />
+      ) : (
       <div className="space-y-4">
         <form
           className="flex gap-2"
@@ -166,6 +209,7 @@ export default function SearchModal({ onPick, onClose }: Props) {
           </div>
         )}
       </div>
+      )}
     </Modal>
   );
 }

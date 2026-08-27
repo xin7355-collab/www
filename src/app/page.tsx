@@ -54,7 +54,7 @@ type Dialog =
 
 export default function Home() {
   const accounts = useAccounts();
-  const { gimyDomain, saveGimyDomain } = useSettings();
+  const { gimyDomain, saveGimyDomain, youtubeKey, saveYoutubeKey } = useSettings();
   const library = useLibrary(accounts.isLoggedIn ? accounts.currentAccount : '');
   const shortcuts = useShortcuts();
   const shared = useSharedInput();
@@ -446,6 +446,9 @@ export default function Home() {
         <SearchModal
           onPick={(prefill) => setDialog({ kind: 'add', prefill })}
           onClose={close}
+          youtubeKey={youtubeKey}
+          onImport={library.addMany}
+          onOpenSettings={() => setDialog({ kind: 'settings' })}
         />
       )}
 
@@ -456,6 +459,8 @@ export default function Home() {
       {active.kind === 'settings' && (
         <SettingsModal
           gimyDomain={gimyDomain}
+          youtubeKey={youtubeKey}
+          onSaveYoutubeKey={saveYoutubeKey}
           shortcuts={shortcuts}
           items={library.items}
           onImport={library.addMany}

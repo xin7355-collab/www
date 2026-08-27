@@ -10,6 +10,8 @@ import { MAIN_TYPES, MediaItem, NewMediaItem } from '@/types/media';
 
 interface Props {
   gimyDomain: string;
+  youtubeKey: string;
+  onSaveYoutubeKey: (value: string) => void;
   shortcuts: SiteShortcut[];
   account: string;
   items: MediaItem[];
@@ -22,6 +24,8 @@ interface Props {
 
 export default function SettingsModal({
   gimyDomain,
+  youtubeKey,
+  onSaveYoutubeKey,
   shortcuts,
   account,
   items,
@@ -40,6 +44,7 @@ export default function SettingsModal({
   const [scType, setScType] = useState('');
   const [copied, setCopied] = useState(false);
   const [importMsg, setImportMsg] = useState('');
+  const [ytKey, setYtKey] = useState(youtubeKey);
 
   const handleImport = async (file: File | undefined) => {
     if (!file) return;
@@ -190,6 +195,47 @@ export default function SettingsModal({
               加入
             </button>
           </div>
+        </section>
+
+        <section className="border-t border-ink-border pt-5">
+          <h3 className="mb-1 text-sm text-mist">
+            YouTube 搜尋金鑰
+            {youtubeKey && <span className="ml-2 text-[11px] text-jade">已設定</span>}
+          </h3>
+          <p className="mb-2.5 text-[11px] leading-relaxed text-mist-shadow">
+            填了之後就能在搜尋視窗直接搜 YouTube、看縮圖挑片，一鍵加進片庫，
+            也能整份匯入播放清單。免費額度每天約 100 次搜尋。
+          </p>
+          <div className="flex gap-2">
+            <input
+              className="field min-w-0 flex-1 font-num"
+              type="password"
+              value={ytKey}
+              onChange={(e) => setYtKey(e.target.value)}
+              placeholder="AIza…"
+              autoComplete="off"
+            />
+            <button
+              onClick={() => onSaveYoutubeKey(ytKey)}
+              className="shrink-0 rounded-lg bg-moon px-4 text-sm font-medium text-ink-black transition hover:bg-moon-soft"
+            >
+              儲存
+            </button>
+          </div>
+          <p className="mt-1.5 text-[11px] leading-relaxed text-mist-shadow">
+            到{' '}
+            <a
+              href="https://console.cloud.google.com/apis/credentials"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-moon underline-offset-2 hover:underline"
+            >
+              Google Cloud Console
+            </a>{' '}
+            建立 API 金鑰，並啟用「YouTube Data API v3」。
+            <span className="text-mist-silver">金鑰只存在這台裝置的瀏覽器</span>，
+            不會上傳、也不在程式碼裡 —— 換裝置要各自填一次。
+          </p>
         </section>
 
         <section className="border-t border-ink-border pt-5">

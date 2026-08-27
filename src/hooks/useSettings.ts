@@ -5,6 +5,7 @@ import { setStored, useStored } from '@/lib/localStore';
 import { DEFAULT_GIMY_DOMAIN } from '@/lib/watchUrl';
 
 const KEY = 'myStream.gimyDomain';
+const YT_KEY = 'myStream.youtubeKey';
 
 /**
  * gimy 之類會換網域的站點，網域是全域設定。
@@ -18,7 +19,17 @@ export function useSettings() {
     setStored(KEY, value.trim().replace(/\/+$/, '') || DEFAULT_GIMY_DOMAIN);
   }, []);
 
-  return { gimyDomain, saveGimyDomain };
+  /**
+   * YouTube Data API 金鑰。**存在這台裝置**，不打包進 bundle ——
+   * 靜態站沒有伺服器可以藏東西，寫進建置變數等於公開給所有人用你的額度。
+   */
+  const youtubeKey = useStored(YT_KEY, '');
+
+  const saveYoutubeKey = useCallback((value: string) => {
+    setStored(YT_KEY, value.trim());
+  }, []);
+
+  return { gimyDomain, saveGimyDomain, youtubeKey, saveYoutubeKey };
 }
 
 // ─── 播放進度（直鏈影片用）────────────────────────────────────
