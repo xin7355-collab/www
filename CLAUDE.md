@@ -131,6 +131,10 @@ Browser (Next.js static export)  ──►  Google Apps Script  ──►  Googl
   所以動態載入的 chunk 不會被預先下載 —— 串流播放本來就需要網路，
   預快取它對離線沒有幫助，只是白吃流量。加新的動態 import 時不必特別處理
 - 播放期間請求 Wake Lock（螢幕不休眠），暫停時放掉
+- **片頭片尾標記**（`src/lib/skipMarks.ts`）是整部作品共用的，因為同一部番每集的
+  OP 長度幾乎一樣。自動跳過**只作用於片頭** —— 自動跳片尾等於幫使用者結束播放。
+  「跳過片尾」是跳到 `duration - 0.5` 讓它自然播完觸發 `ended`，
+  進度 +1 那條路才不必在這裡重寫一份
 - Media Session API 提供鎖定畫面控制與 Android 的背景音訊。
   iOS 螢幕鎖定必定暫停 `<video>`，內嵌 iframe 的播放器也碰不到 —— 這兩個不是 bug
 - 鍵盤快捷鍵綁在播放器與全站兩層，**輸入框聚焦時兩邊都要讓開**，
@@ -188,9 +192,12 @@ Browser (Next.js static export)  ──►  Google Apps Script  ──►  Googl
 畫面照樣立刻更新。分頁關閉時用 `navigator.sendBeacon` 補送還沒出去的那筆 ——
 一般 fetch 會隨頁面卸載被中斷。表單的「儲存」不走這條，那是明確的存檔動作，要立刻送。
 
-**觀看紀錄**（`src/lib/history.ts`）與 `useSettings` 的 `pos.{url}` 分工不同，兩者都留著：
-前者是「這部作品什麼時候看的」（鍵是名稱＋連結，因為 rowNumber 會因刪列位移），
-後者是「這支影片的續播點」（鍵是網址）。
+**存在瀏覽器本機的衍生資料**（觀看紀錄、播出排程、片頭片尾標記）共用
+`src/lib/itemKey.ts` 的鍵：`名稱::連結`。**不要用 rowNumber** —— 刪除任何一列都會讓
+後面的列號整批位移，紀錄就會悄悄對到別部作品上。
+
+`useSettings` 的 `pos.{url}` 是另一回事，鍵是網址：那是「這支影片的續播點」，
+換一集就是另一筆；上面那些是「這部作品的」。兩者都留著。
 
 ## 重點注意事項
 

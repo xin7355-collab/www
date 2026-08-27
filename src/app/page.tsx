@@ -22,6 +22,7 @@ import {
   saveSchedule,
   scheduleKey,
   signature,
+  titleFromKey,
   useSchedules,
 } from '@/lib/schedule';
 import { fetchSchedule } from '@/lib/tvmaze';
@@ -82,7 +83,7 @@ export default function Home() {
       if (!isStale(binding, at) || inFlight.has(key)) continue;
 
       inFlight.add(key);
-      fetchSchedule(binding.showId, key.split('::')[0])
+      fetchSchedule(binding.showId, titleFromKey(key))
         .then((schedule) => saveSchedule(key, schedule, stamp()))
         .catch(() => {
           // 抓不到就維持舊資料，下次進來再試 —— 不值得為此打斷使用者

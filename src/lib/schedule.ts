@@ -1,8 +1,8 @@
 'use client';
 
+import { itemKey, titleFromKey } from './itemKey';
 import { setStored, useStored } from './localStore';
 import { Schedule } from './tvmaze';
-import { MediaItem } from '@/types/media';
 
 /**
  * 播出排程的綁定與快取。
@@ -31,9 +31,10 @@ const KEY = 'myStream.schedule';
 /** 超過這個時間就重抓。播出表一天變不了幾次，半天足夠 */
 export const STALE_MS = 12 * 60 * 60 * 1000;
 
-/** 與觀看紀錄用同一種鍵：rowNumber 會因刪列位移，不能當識別 */
-export const scheduleKey = (item: Pick<MediaItem, 'title' | 'watchUrl'>) =>
-  `${item.title.trim()}::${item.watchUrl.trim()}`;
+/** 與觀看紀錄、片頭標記共用同一種鍵 */
+export const scheduleKey = itemKey;
+
+export { titleFromKey };
 
 type Store = Record<string, Binding>;
 

@@ -1,5 +1,6 @@
 'use client';
 
+import { itemKey } from './itemKey';
 import { setStored, useStored } from './localStore';
 import { MediaItem } from '@/types/media';
 
@@ -8,10 +9,7 @@ import { MediaItem } from '@/types/media';
  *
  * 跟 useSettings 的 `myStream.pos.${url}` 分工不同，兩者都留著：
  * - `pos.${url}` 是**這支影片的續播點**，鍵是網址，換一集就是另一筆
- * - 這裡是**這部作品的觀看紀錄**，鍵是「名稱＋連結」，用來排「繼續觀看」
- *
- * 為什麼不用 rowNumber 當鍵：刪除任何一列都會讓後面的列號整批位移，
- * 紀錄就會對到別部作品上。
+ * - 這裡是**這部作品的觀看紀錄**，鍵見 `itemKey`，用來排「繼續觀看」
  *
  * 存 localStorage 而不是 Sheets：這是「這台裝置上我看到哪」，
  * 換裝置本來就該重新算；而且每次開播都寫一次雲端太吵。
@@ -33,8 +31,7 @@ export interface HistoryEntry {
 const KEY = 'myStream.history';
 const LIMIT = 60;
 
-export const historyKey = (item: Pick<MediaItem, 'title' | 'watchUrl'>) =>
-  `${item.title.trim()}::${item.watchUrl.trim()}`;
+export const historyKey = itemKey;
 
 function parse(raw: string): HistoryEntry[] {
   try {

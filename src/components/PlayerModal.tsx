@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from 'react';
 import Modal from './Modal';
 import { deriveCover, ResolvedWatch } from '@/lib/watchUrl';
 import { recordWatch } from '@/lib/history';
+import { itemKey } from '@/lib/itemKey';
+import { EMPTY_MARKS, marksFor, saveMarks, SkipMarks, useSkipMarks } from '@/lib/skipMarks';
 import { loadPosition, savePosition } from '@/hooks/useSettings';
 import { MediaItem } from '@/types/media';
 
@@ -46,6 +48,9 @@ interface DirectPlayerProps {
   onEnded: () => void;
   /** 定期回報看到哪，寫進觀看紀錄 */
   onProgress: (position: number, duration: number) => void;
+  /** 片頭片尾標記，整部作品共用 */
+  marks: SkipMarks;
+  onMarksChange: (marks: SkipMarks) => void;
 }
 
 /**
@@ -56,11 +61,21 @@ interface DirectPlayerProps {
  * 2. 離開時記住播到幾秒，下次自動接續
  * 3. 播放期間請求 Wake Lock，手機不會看到一半熄螢幕
  */
-function DirectPlayer({ url, title, cover, onEnded, onProgress }: DirectPlayerProps) {
+function DirectPlayer({
+  url,
+  title,
+  cover,
+  onEnded,
+  onProgress,
+  marks,
+  onMarksChange,
+}: DirectPlayerProps) {
   const ref = useRef<HTMLVideoElement>(null);
 
   const [speed, setSpeed] = useState(1);
   const [pipAvailable, setPipAvailable] = useState(false);
+  /** 目前播到第幾秒（只取整數，免得每秒重繪四次） */
+  const [clock, setClock] = useState(0);
 
   // 開啟當下的續播點，只取一次。這個元件只在使用者點開播之後才渲染，
   // 不會在預渲染階段跑到，所以讀 localStorage 不會有 hydration 問題。
@@ -77,6 +92,11 @@ function DirectPlayer({ url, title, cover, onEnded, onProgress }: DirectPlayerPr
   useEffect(() => {
     progressRef.current = onProgress;
   }, [onProgress]);
+
+  const marksRef = useRef(marks);
+  useEffect(() => {
+    marksRef.current = marks;
+  }, [marks]);
 
   // ── 影片來源：m3u8 走 hls.js，其餘直接餵給 <video>
   useEffect(() => {
@@ -118,6 +138,20 @@ function DirectPlayer({ url, title, cover, onEnded, onProgress }: DirectPlayerPr
       progressRef.current(el.currentTime, Number.isFinite(el.duration) ? el.duration : 0);
     };
     const timer = window.setInterval(persist, 5000);
+
+    // timeupdate 一秒會觸發好幾次，只在整數秒變動時才更新 state
+    const tick = () => {
+      const second = Math.floor(el.currentTime);
+      setClock((prev) => (prev === second ? prev : second));
+
+      // 自動跳過只作用於片頭。片尾一律留給按鈕 ——
+      // 自動跳片尾等於幫使用者結束播放，太超過了
+      const { opEnd, auto } = marksRef.current;
+      if (auto && opEnd > 0 && el.currentTime > 0.5 && el.currentTime < opEnd) {
+        el.currentTime = opEnd;
+      }
+    };
+    el.addEventListener('timeupdate', tick);
 
     const handleEnded = () => {
       savePosition(url, 0); // 看完了就不要再接續到片尾
@@ -183,6 +217,7 @@ function DirectPlayer({ url, title, cover, onEnded, onProgress }: DirectPlayerPr
     return () => {
       window.clearInterval(timer);
       persist();
+      el.removeEventListener('timeupdate', tick);
       el.removeEventListener('ended', handleEnded);
       el.removeEventListener('play', acquire);
       el.removeEventListener('pause', release);
@@ -262,6 +297,30 @@ function DirectPlayer({ url, title, cover, onEnded, onProgress }: DirectPlayerPr
     };
   }, [title, cover]);
 
+  const inOpening = marks.opEnd > 0 && clock < marks.opEnd;
+  const inEnding = marks.edStart > 0 && clock >= marks.edStart;
+
+  const skipOpening = () => {
+    if (ref.current) ref.current.currentTime = marks.opEnd;
+  };
+
+  /**
+   * 跳到接近結尾而不是直接設成 duration —— 讓它自然播到底觸發 ended，
+   * 進度 +1 那條路才會照常走，不必在這裡重複一份邏輯。
+   */
+  const skipEnding = () => {
+    const el = ref.current;
+    if (!el || !Number.isFinite(el.duration)) return;
+    el.currentTime = Math.max(0, el.duration - 0.5);
+    void el.play();
+  };
+
+  const markHere = (field: 'opEnd' | 'edStart') => {
+    const el = ref.current;
+    if (!el) return;
+    onMarksChange({ ...marks, [field]: Math.floor(el.currentTime) });
+  };
+
   const changeSpeed = (value: number) => {
     setSpeed(value);
     if (ref.current) ref.current.playbackRate = value;
@@ -279,13 +338,25 @@ function DirectPlayer({ url, title, cover, onEnded, onProgress }: DirectPlayerPr
 
   return (
     <div>
-      <video
-        ref={ref}
-        controls
-        autoPlay
-        playsInline
-        className="aspect-video w-full rounded-lg bg-black"
-      />
+      <div className="relative">
+        <video
+          ref={ref}
+          controls
+          autoPlay
+          playsInline
+          className="aspect-video w-full rounded-lg bg-black"
+        />
+
+        {/* 浮在原生控制列上方，避免蓋住進度條 */}
+        {(inOpening || inEnding) && (
+          <button
+            onClick={inOpening ? skipOpening : skipEnding}
+            className="absolute bottom-16 right-3 rounded-lg border border-moon-soft/60 bg-ink-black/85 px-3 py-2 text-xs text-mist backdrop-blur transition hover:bg-moon hover:text-ink-black"
+          >
+            {inOpening ? '跳過片頭 ▸' : '跳過片尾 ▸'}
+          </button>
+        )}
+      </div>
 
       <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-mist-shadow">
         {resumeAt > 0 && (
@@ -323,12 +394,46 @@ function DirectPlayer({ url, title, cover, onEnded, onProgress }: DirectPlayerPr
           空白鍵 播放/暫停 ・ ← → 快轉 {SEEK_STEP} 秒 ・ ↑ ↓ 音量 ・ F 全螢幕 ・ M 靜音
         </span>
       </div>
+
+      {/* 片頭片尾標記：標一次，整部作品每一集共用 */}
+      <div className="mt-1.5 flex flex-wrap items-center gap-2 border-t border-ink-border pt-1.5 text-[11px] text-mist-shadow">
+        <span>片頭片尾</span>
+        <button onClick={() => markHere('opEnd')} className="hover:text-moon">
+          片頭到這 {marks.opEnd > 0 && <span className="text-mist-silver">({formatTime(marks.opEnd)})</span>}
+        </button>
+        <button onClick={() => markHere('edStart')} className="hover:text-moon">
+          片尾從這 {marks.edStart > 0 && <span className="text-mist-silver">({formatTime(marks.edStart)})</span>}
+        </button>
+
+        {marks.opEnd > 0 && (
+          <label className="flex items-center gap-1">
+            <input
+              type="checkbox"
+              checked={marks.auto}
+              onChange={(e) => onMarksChange({ ...marks, auto: e.target.checked })}
+              className="h-3 w-3 accent-[#e2c178]"
+            />
+            自動跳過片頭
+          </label>
+        )}
+
+        {(marks.opEnd > 0 || marks.edStart > 0) && (
+          <button
+            onClick={() => onMarksChange(EMPTY_MARKS)}
+            className="ml-auto hover:text-cinnabar"
+          >
+            清除標記
+          </button>
+        )}
+      </div>
     </div>
   );
 }
 
 export default function PlayerModal({ item, watch, onClose, onBump }: Props) {
   const done = Number.parseInt(item.progress.replace(/[^\d]/g, ''), 10) || 0;
+  const key = itemKey(item);
+  const marks = marksFor(useSkipMarks(), key);
 
   // 一開播就記一筆，內嵌播放器量不到秒數也至少留下「什麼時候看的」
   const { title, watchUrl, progress } = item;
@@ -374,6 +479,8 @@ export default function PlayerModal({ item, watch, onClose, onBump }: Props) {
           onProgress={(position, duration) =>
             recordWatch({ title, watchUrl, progress }, position, duration)
           }
+          marks={marks}
+          onMarksChange={(next) => saveMarks(key, next)}
         />
       ) : (
         <iframe
