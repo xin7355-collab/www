@@ -246,6 +246,20 @@ export default function Home() {
     return true;
   };
 
+  /**
+   * 卡片選單的「用外部 App 開」。
+   *
+   * **沒設定樣板時不是藏起來，而是把人帶去設定頁** —— 藏起來的入口
+   * 等於這個功能不存在，使用者永遠不會知道有這回事。
+   */
+  const openInApp = (item: MediaItem) => {
+    if (!externalScheme.trim()) {
+      setDialog({ kind: 'settings' });
+      return;
+    }
+    openExternally(item, resolveWatch(watchUrlOf(item), item.progress, gimyDomain).url);
+  };
+
   /** 能內嵌的就開站內播放器，其餘（gimy / 一般外站）直接開新分頁 */
   const handlePlay = (item: MediaItem) => {
     const watch = resolveWatch(watchUrlOf(item), item.progress, gimyDomain);
@@ -303,8 +317,32 @@ export default function Home() {
   return (
     <main className="mx-auto max-w-7xl px-4 pb-16 pt-6 sm:px-6">
       {/* Header */}
-      <header className="mb-6 flex items-start justify-between gap-4">
-        <h1 className="font-display text-2xl tracking-widest text-mist">墨影</h1>
+      {/*
+        搜尋框放在標題旁邊那塊本來就空著的地方 —— 它是最常用的東西，
+        不該再往下佔一整行。min-w-0 是必要的：flex 子元素預設不會縮到
+        內容以下，少了它輸入框會把頁首撐爆。
+      */}
+      <header className="mb-4 flex items-center gap-2">
+        <h1 className="shrink-0 font-display text-xl tracking-widest text-mist sm:text-2xl">
+          墨影
+        </h1>
+
+        <form
+          className="min-w-0 flex-1"
+          onSubmit={(e) => {
+            e.preventDefault();
+            const q = library.search.trim();
+            if (q) setDialog({ kind: 'search', q });
+          }}
+        >
+          <input
+            className="field"
+            id="library-search"
+            placeholder="篩片庫；Enter 上網找"
+            value={library.search}
+            onChange={(e) => library.setSearch(e.target.value)}
+          />
+        </form>
 
         <div className="flex shrink-0 items-center gap-1.5">
           <button
@@ -331,12 +369,9 @@ export default function Home() {
         setTab={library.setTab}
         statusFilter={library.statusFilter}
         setStatusFilter={library.setStatusFilter}
-        search={library.search}
-        setSearch={library.setSearch}
         sortKey={library.sortKey}
         setSortKey={library.setSortKey}
         counts={counts}
-        onSearchOnline={(q) => setDialog({ kind: 'search', q })}
       />
 
       <SiteShortcuts
@@ -375,11 +410,7 @@ export default function Home() {
                   onSetProgress={library.setProgress}
                   onFindName={(it) => setDialog({ kind: 'rename', item: it })}
                   onWhereToRead={(it) => setDialog({ kind: 'whereToRead', item: it })}
-                  onOpenExternal={
-                    externalScheme
-                      ? (it) => openExternally(it, resolveWatch(watchUrlOf(it), it.progress, gimyDomain).url)
-                      : undefined
-                  }
+                  onOpenExternal={openInApp}
                 />
               </div>
             ))}
@@ -459,11 +490,7 @@ export default function Home() {
                   onSetProgress={library.setProgress}
                   onFindName={(it) => setDialog({ kind: 'rename', item: it })}
                   onWhereToRead={(it) => setDialog({ kind: 'whereToRead', item: it })}
-                  onOpenExternal={
-                    externalScheme
-                      ? (it) => openExternally(it, resolveWatch(watchUrlOf(it), it.progress, gimyDomain).url)
-                      : undefined
-                  }
+                  onOpenExternal={openInApp}
                   selectMode={picked !== null}
                   selected={picked?.includes(historyKey(item)) ?? false}
                   onToggleSelect={(it) =>
@@ -527,6 +554,7 @@ export default function Home() {
               watch={resolveWatch(watchUrlOf(live), live.progress, gimyDomain)}
               onBump={library.bumpProgress}
               backgroundAudio={backgroundAudio}
+              onOpenExternal={openInApp}
               onClose={close}
             />
           );

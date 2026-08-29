@@ -218,6 +218,18 @@ body::after {
     transition: border-color 0.15s ease, box-shadow 0.15s ease;
   }
 
+  /*
+   * iOS Safari 只要輸入框字級小於 16px，一聚焦就會自動放大整頁 ——
+   * 畫面會突然被推歪、標題被切掉，看起來像版面壞了。
+   * 用 max() 保證至少 16 CSS px，同時仍尊重使用者調大的字級設定。
+   * 只針對觸控裝置，桌機維持原本比較緊湊的 14px。
+   */
+  @media (pointer: coarse) {
+    .field {
+      font-size: max(16px, 0.875rem);
+    }
+  }
+
   .field:focus {
     border-color: var(--moon-gold-soft);
     box-shadow: 0 0 0 3px var(--moon-glow);

@@ -16,6 +16,8 @@ interface Props {
   onBump: (item: MediaItem, delta: number) => void;
   /** 切到背景時要不要繼續放聲音（只對直鏈有效） */
   backgroundAudio: boolean;
+  /** 把這部交給外部 App 開；沒設定樣板時會帶去設定頁 */
+  onOpenExternal: (item: MediaItem) => void;
 }
 
 const SPEEDS = [0.75, 1, 1.25, 1.5, 2];
@@ -545,7 +547,7 @@ function DirectPlayer({
   );
 }
 
-export default function PlayerModal({ item, watch, onClose, onBump, backgroundAudio }: Props) {
+export default function PlayerModal({ item, watch, onClose, onBump, backgroundAudio, onOpenExternal }: Props) {
   const done = Number.parseInt(item.progress.replace(/[^\d]/g, ''), 10) || 0;
   const key = itemKey(item);
   const marks = marksFor(useSkipMarks(), key);
@@ -568,13 +570,21 @@ export default function PlayerModal({ item, watch, onClose, onBump, backgroundAu
             {item.totalEp && ` / ${item.totalEp}`}
           </span>
           <div className="flex-1" />
+          {/* 正在看內嵌播放器的當下，最想切出去的就是這裡 */}
+          <button
+            onClick={() => onOpenExternal(item)}
+            className="rounded-lg border border-ink-border-strong px-3 py-1.5 text-xs text-mist-silver transition hover:border-moon-soft hover:text-moon"
+            title="交給你設定的 App 開（可背景播）"
+          >
+            外部 App ↗
+          </button>
           <a
             href={watch.url}
             target="_blank"
             rel="noopener noreferrer"
             className="rounded-lg border border-ink-border-strong px-3 py-1.5 text-xs text-mist-silver transition hover:text-mist"
           >
-            在原站開啟 ↗
+            原站 ↗
           </a>
           <button
             onClick={() => onBump(item, 1)}
