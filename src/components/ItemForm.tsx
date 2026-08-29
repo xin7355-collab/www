@@ -304,6 +304,15 @@ export default function ItemForm({
               placeholder="S1"
             />
           </div>
+          <div>
+            <Label>片長</Label>
+            <input
+              className="field font-num"
+              value={form.duration}
+              onChange={(e) => set('duration', e.target.value)}
+              placeholder="23:11"
+            />
+          </div>
         </div>
 
         <div className="grid grid-cols-2 gap-3">

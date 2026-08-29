@@ -220,7 +220,7 @@ export async function fetchMeta(url: string): Promise<UrlMeta> {
 export async function searchWorks(
   q: string,
   kind: string,
-  keys: { tmdbKey?: string; youtubeKey?: string } = {},
+  keys: { tmdbKey?: string; youtubeKey?: string; prefer?: string } = {},
 ): Promise<SearchResult[]> {
   const keyword = q.trim();
   if (!keyword) throw new Error('請輸入要搜尋的關鍵字');
@@ -252,7 +252,23 @@ export async function searchWorks(
   ]);
 
   // 順序＝品質順序：TMDB 的繁中資料最完整，後端那份（iTunes / Google Books）墊底
-  const results = settled.flatMap((r) => (r.status === 'fulfilled' ? r.value : []));
+  let results = settled.flatMap((r) => (r.status === 'fulfilled' ? r.value : []));
+
+  /*
+   * 偏好來源排到最前面。用 stable sort 只分兩層，同層維持原本的品質順序 ——
+   * 完全按來源重排會把「這個來源裡比較爛的那筆」也拱到前面。
+   * 那個來源沒有結果時這裡什麼都不會發生，其餘照舊，不會變成查無結果。
+   */
+  const prefer = keys.prefer?.trim();
+  if (prefer) {
+    results = results
+      .map((r, i) => ({ r, i }))
+      .sort((a, b) => {
+        const rank = Number(b.r.source === prefer) - Number(a.r.source === prefer);
+        return rank !== 0 ? rank : a.i - b.i;
+      })
+      .map((x) => x.r);
+  }
 
   if (results.length > 0) return traditionalize(results);
 

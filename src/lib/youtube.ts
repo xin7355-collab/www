@@ -237,5 +237,6 @@ export function toSearchResult(video: YouTubeVideo): SearchResult {
     url: watchUrlFor(video.id),
     source: 'YouTube',
     watchUrl: watchUrlFor(video.id),
+    duration: video.duration,
   };
 }

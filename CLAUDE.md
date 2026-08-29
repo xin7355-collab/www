@@ -55,6 +55,9 @@ Browser (Next.js static export)  ──►  Google Apps Script  ──►  Googl
    `rowNumber`（實際列號，從 2 起算）是所有更新的唯一定位鍵，比名稱比對可靠。
    欄位順序定義在三個地方，**改一處必須三處一起改**：
    - `apps-script-code.gs` 的 `HEADERS` 與 `FIELD_COLUMN`
+     （**`addItem` 的整列是從 `FIELD_COLUMN` 推導出來的**，長度一定等於
+     `COL_COUNT`。原本是手寫 15 個值塞進整列寬度，加欄位之後 `setValues`
+     會拋「維度不符」—— 而且只在部署後才炸，本機 mock 測不到）
    - `src/lib/schema.ts` 的 `COLUMN_ORDER`
    - `src/types/media.ts` 的 `MediaItem`
 
@@ -147,6 +150,39 @@ Browser (Next.js static export)  ──►  Google Apps Script  ──►  Googl
   `APPEARANCE_KEYS` 必須一致
 - 淺色主題要把 `--grain-opacity` 設為 0：那層顆粒雜訊是為深底調的，
   鋪在亮底上會變成一層髒污
+
+### 搜尋沒有按鈕，就是片庫上面那個輸入框
+
+一個輸入框做兩件事：**打字即時篩片庫，按 Enter 才去線上來源搜尋**。
+九成的時候人要做的是篩自己的片庫，為了那一成把主要動作變成「先按 🔍 再打字」
+並不划算。線上結果用 `Modal` 的 `panel` 模式貼著上方展開 ——
+它是「輸入框展開的結果」，蓋成置中大視窗會讓人以為離開了片庫。
+
+`SearchModal` 的 `initialQuery` 進來時會**自己跑一次**（使用者已經按過 Enter 了）。
+那一段要包一層 `Promise.resolve().then()` —— `run()` 一進去就同步 setState，
+直接寫在 effect 裡會撞上 `react-hooks/set-state-in-effect`。
+
+### 偏好來源
+
+`searchWorks` 的 `prefer` 參數把某個來源排到最前面，**只分兩層**，
+同層維持原本的品質順序 —— 完全按來源重排會把「那個來源裡比較爛的那筆」也拱到前面。
+那個來源沒有結果時什麼都不會發生，不會變成查無結果。
+
+### 用外部 App 開 YouTube
+
+網頁拿不到 iOS 的背景音訊權限，但使用者手機裡通常已經裝了做得到的 App。
+`externalApp.ts` 讓使用者填一個 **URL 樣板**（`{url}` / `{rawurl}` / `{nohttps}`），
+YouTube 連結就交給那個 App 開。**不內建 App 清單** —— 各家 scheme 沒有標準
+也沒有公開登記處，寫死一份只會過期。
+
+導頁要用 `window.location.assign()`，指派 `location.href` 會被 React Compiler 的
+`react-hooks/immutability` 當成「改動元件外的變數」擋下來。
+
+### 沒有「重新整理」鍵
+
+新增本來就是樂觀更新（卡片立刻出現），真正需要重抓的是「別台裝置改過」，
+那正好對應**切回這個分頁**。所以改成 `visibilitychange` 時 silent reload，
+不必留一顆按鈕。
 
 ### 搜尋只有一個搜尋框
 

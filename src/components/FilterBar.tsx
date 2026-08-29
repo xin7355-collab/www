@@ -13,6 +13,8 @@ interface Props {
   sortKey: SortKey;
   setSortKey: (v: SortKey) => void;
   counts: Record<string, number>;
+  /** 按 Enter 或那顆小圖示時，拿這個關鍵字去線上來源搜尋 */
+  onSearchOnline: (keyword: string) => void;
 }
 
 const SORT_LABEL: Record<SortKey, string> = {
@@ -32,6 +34,7 @@ export default function FilterBar({
   sortKey,
   setSortKey,
   counts,
+  onSearchOnline,
 }: Props) {
   // 「待追」排在最前面 —— 打開 App 最想知道的就是「有哪幾部積著沒追」
   const tabs = [BEHIND_TAB, '全部', ...MAIN_TYPES];
@@ -66,13 +69,34 @@ export default function FilterBar({
 
       {/* 搜尋 + 狀態 + 排序 */}
       <div className="flex flex-wrap gap-2">
-        <input
-          className="field min-w-[10rem] flex-1"
-          id="library-search"
-          placeholder="搜尋名稱、備註、平台…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
+        {/*
+          一個輸入框做兩件事：打字即時篩片庫，按 Enter 才去線上來源搜尋。
+          線上搜尋以前藏在一顆 🔍 按鈕後面，但九成的時候人想做的是篩自己的片庫，
+          為了那一成把主要動作變成兩步並不划算。
+        */}
+        <form
+          className="flex min-w-[12rem] flex-1 gap-1.5"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (search.trim()) onSearchOnline(search.trim());
+          }}
+        >
+          <input
+            className="field min-w-0 flex-1"
+            id="library-search"
+            placeholder="篩片庫；按 Enter 上網找"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          <button
+            type="submit"
+            disabled={!search.trim()}
+            title="到 Bangumi、TMDB、YouTube 等來源搜尋"
+            className="shrink-0 rounded-lg border border-ink-border-strong px-2.5 text-xs text-mist-silver transition hover:border-moon-soft hover:text-moon disabled:opacity-30"
+          >
+            上網找
+          </button>
+        </form>
         <select
           className="field w-auto"
           value={statusFilter}

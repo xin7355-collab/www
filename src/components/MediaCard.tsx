@@ -20,6 +20,8 @@ interface Props {
   onFindName: (item: MediaItem) => void;
   /** 小說漫畫：帶去各平台找哪裡看得到 */
   onWhereToRead: (item: MediaItem) => void;
+  /** 設了外部 App 樣板才有：手動把這部丟給那個 App 開 */
+  onOpenExternal?: (item: MediaItem) => void;
   /** 批次選取模式：點封面變成勾選而不是開播 */
   selectMode?: boolean;
   selected?: boolean;
@@ -51,6 +53,7 @@ export default function MediaCard({
   onSetProgress,
   onFindName,
   onWhereToRead,
+  onOpenExternal,
   selectMode = false,
   selected = false,
   onToggleSelect,
@@ -166,6 +169,13 @@ export default function MediaCard({
         </div>
       </div>
 
+      {/* 片長貼右下角 —— 挑片時「這集多長」跟封面一樣是第一眼要的資訊 */}
+      {item.duration && (
+        <span className="font-num pointer-events-none absolute bottom-9 right-2 rounded bg-ink-black/85 px-1 text-[10px] text-mist-silver">
+          {item.duration}
+        </span>
+      )}
+
       {/* 集數進度條，貼在卡片最底 */}
       {percent > 0 && (
         <div className="absolute inset-x-0 bottom-0 h-0.5 bg-ink-black/60">
@@ -251,6 +261,13 @@ export default function MediaCard({
                 run: () => onWhereToRead(item),
                 danger: false,
                 show: item.mainType === '小說' || item.mainType === '漫畫',
+              },
+              // 手動切換：平常照設定走，偶爾想換一邊開就從這裡
+              {
+                label: '用外部 App 開',
+                run: () => onOpenExternal?.(item),
+                danger: false,
+                show: Boolean(onOpenExternal) && playable,
               },
               { label: '刪除', run: () => onDelete(item), danger: true, show: true },
             ]

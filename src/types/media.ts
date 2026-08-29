@@ -92,6 +92,8 @@ export interface MediaItem {
   nextAirDate: string;
   /** 例：第 188 集（S8E12） */
   nextEpLabel: string;
+  /** 片長，例：23:11。YouTube 搜尋會自己帶進來，其餘可手動填 */
+  duration: string;
 }
 
 /** 新增時可填的欄位（rowNumber 與 updatedAt 由後端產生） */

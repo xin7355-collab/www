@@ -18,6 +18,8 @@ export interface SearchResult {
   watchUrl?: string;
   /** Internet Archive 的項目 ID，用來在加入時換成影片直鏈 */
   archiveId?: string;
+  /** 片長，例：23:11。目前只有 YouTube 給得出來 */
+  duration?: string;
 
   // ── 以下只有 TMDB 的結果會有 ──
   /** 用來補查總集數 */

@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Modal from './Modal';
 import { installDailyTrigger, maskedUrl, probe, Probe, refreshSchedulesNow } from '@/lib/api';
 import { FONT_SCALES, THEMES } from '@/lib/appearance';
+import { PLACEHOLDERS } from '@/lib/externalApp';
 import { loadConverter } from '@/lib/s2t';
 import { downloadBackup, downloadCsv, findDuplicates, parseBackup } from '@/lib/backup';
 import { addShortcut, removeShortcut, SiteShortcut } from '@/lib/shortcuts';
@@ -15,6 +16,10 @@ interface Props {
   onSaveTheme: (value: string) => void;
   backgroundAudio: boolean;
   onSaveBackgroundAudio: (on: boolean) => void;
+  externalScheme: string;
+  onSaveExternalScheme: (value: string) => void;
+  preferredSource: string;
+  onSavePreferredSource: (value: string) => void;
   /** 就地改一筆（片庫轉繁體用） */
   onPatch: (row: number, fields: MediaPatch) => Promise<void>;
   /** 刪掉一列（清理重複用） */
@@ -41,6 +46,10 @@ export default function SettingsModal({
   onSaveTheme,
   backgroundAudio,
   onSaveBackgroundAudio,
+  externalScheme,
+  onSaveExternalScheme,
+  preferredSource,
+  onSavePreferredSource,
   onPatch,
   onRemove,
   fontScale,
@@ -60,6 +69,7 @@ export default function SettingsModal({
   onDeleteAccount,
 }: Props) {
   const [domain, setDomain] = useState(gimyDomain);
+  const [scheme, setScheme] = useState(externalScheme);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [testing, setTesting] = useState(false);
   const [result, setResult] = useState<Probe | null>(null);
@@ -413,6 +423,73 @@ export default function SettingsModal({
           >
             {backgroundAudio ? '已開啟 —— 點一下關閉' : '已關閉 —— 點一下開啟'}
           </button>
+        </section>
+
+        <section className="border-t border-ink-border pt-5">
+          <h3 className="mb-1 text-sm text-mist">偏好來源</h3>
+          <p className="mb-2.5 text-[11px] leading-relaxed text-mist-shadow">
+            搜尋結果會把這個來源排到最前面，之後加片就不用每次自己找。
+            <span className="text-mist-silver">這個來源沒結果時其餘照常遞補</span>，不會變成查無結果。
+          </p>
+          <div className="grid grid-cols-3 gap-1.5">
+            {[
+              { id: '', label: '不指定' },
+              { id: 'YouTube', label: 'YouTube' },
+              { id: 'Bangumi', label: '作品資料' },
+            ].map((opt) => (
+              <button
+                key={opt.id || 'any'}
+                onClick={() => onSavePreferredSource(opt.id)}
+                className={`rounded-lg border py-2 text-xs transition ${
+                  preferredSource === opt.id
+                    ? 'border-moon-soft bg-moon/10 text-moon'
+                    : 'border-ink-border text-mist-silver hover:border-moon-soft/60'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+          <p className="mt-2 text-[10px] leading-relaxed text-mist-shadow">
+            整部作品的每一集要一次加進來：用搜尋視窗最下面的
+            <span className="text-mist-silver">「貼上 YouTube 播放清單網址整份匯入」</span>——
+            一份清單就是一整季，比一集一集搜快得多，也幾乎不花額度。
+          </p>
+        </section>
+
+        <section className="border-t border-ink-border pt-5">
+          <h3 className="mb-1 text-sm text-mist">用外部 App 開 YouTube</h3>
+          <p className="mb-2.5 text-[11px] leading-relaxed text-mist-shadow">
+            填了之後 YouTube 連結會交給你指定的 App 開（Tube Browser、Brave…）。
+            <span className="text-mist-silver">網頁做不到 YouTube 背景播，那些原生 App 可以。</span>
+            留空就照原本的方式站內播。
+          </p>
+          <div className="flex gap-2">
+            <input
+              className="field min-w-0 flex-1 font-num text-[11px]"
+              value={scheme}
+              onChange={(e) => setScheme(e.target.value)}
+              placeholder="例：tubebrowser://open?url={url}"
+            />
+            <button
+              onClick={() => onSaveExternalScheme(scheme)}
+              className="shrink-0 rounded-lg bg-moon px-4 text-sm font-medium text-ink-black transition hover:bg-moon-soft"
+            >
+              儲存
+            </button>
+          </div>
+          <ul className="mt-2 space-y-0.5 text-[10px] leading-relaxed text-mist-shadow">
+            {PLACEHOLDERS.map((p) => (
+              <li key={p.token}>
+                <span className="font-num text-mist-silver">{p.token}</span> —— {p.desc}
+              </li>
+            ))}
+          </ul>
+          <p className="mt-1.5 text-[10px] leading-relaxed text-mist-shadow">
+            不知道 App 的 scheme 怎麼查：在該 App 裡分享一個連結到「拷貝」，
+            貼出來看開頭；或查它的說明文件。設好之後卡片的 ⋯ 也會多一個
+            「用外部 App 開」，可以臨時切換。
+          </p>
         </section>
 
         <section className="border-t border-ink-border pt-5">

@@ -8,6 +8,8 @@ const KEY = 'myStream.gimyDomain';
 const YT_KEY = 'myStream.youtubeKey';
 const TMDB_KEY = 'myStream.tmdbKey';
 const BG_AUDIO_KEY = 'myStream.backgroundAudio';
+const SCHEME_KEY = 'myStream.externalScheme';
+const PREFER_KEY = 'myStream.preferredSource';
 
 /**
  * gimy 之類會換網域的站點，網域是全域設定。
@@ -48,6 +50,27 @@ export function useSettings() {
     setStored(BG_AUDIO_KEY, on ? '1' : '0');
   }, []);
 
+  /**
+   * 外部 App 的 URL 樣板。填了之後 YouTube 連結會交給那個 App 開 ——
+   * 網頁做不到背景播，但那些原生 App 做得到。
+   */
+  const externalScheme = useStored(SCHEME_KEY, '');
+
+  const saveExternalScheme = useCallback((value: string) => {
+    setStored(SCHEME_KEY, value.trim());
+  }, []);
+
+  /**
+   * 偏好來源。搜尋結果會把這個來源排到最前面 ——
+   * 習慣看 YouTube 的人，十次有九次要挑的就是那幾筆，不該每次自己找。
+   * 這個來源沒有結果時，其餘來源照原順序遞補，不會變成查無結果。
+   */
+  const preferredSource = useStored(PREFER_KEY, '');
+
+  const savePreferredSource = useCallback((value: string) => {
+    setStored(PREFER_KEY, value);
+  }, []);
+
   return {
     gimyDomain,
     saveGimyDomain,
@@ -57,6 +80,10 @@ export function useSettings() {
     saveTmdbKey,
     backgroundAudio,
     saveBackgroundAudio,
+    externalScheme,
+    saveExternalScheme,
+    preferredSource,
+    savePreferredSource,
   };
 }
 

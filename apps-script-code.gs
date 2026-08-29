@@ -33,7 +33,8 @@ var HEADERS = [
   '排程ID',       // P 16  tvmazeId    綁定的 TVmaze 作品 ID
   '已播集數',     // Q 17  airedEp     到今天為止已播出幾集
   '下一集日期',   // R 18  nextAirDate YYYY-MM-DD
-  '下一集集數'    // S 19  nextEpLabel 例：第 188 集（S8E12）
+  '下一集集數',   // S 19  nextEpLabel 例：第 188 集（S8E12）
+  '片長'          // T 20  duration    例：23:11。加在最後才不會位移既有資料
 ];
 
 var COL_COUNT = HEADERS.length;
@@ -57,7 +58,8 @@ var FIELD_COLUMN = {
   tvmazeId: 16,
   airedEp: 17,
   nextAirDate: 18,
-  nextEpLabel: 19
+  nextEpLabel: 19,
+  duration: 20
 };
 
 // ─── 路由 ─────────────────────────────────────────────────────
@@ -204,23 +206,27 @@ function addItem(ss, sheetName, item) {
   var today = today8();
   var newRow = sheet.getLastRow() + 1;
 
-  var values = [
-    today,                              // A 最後更新時間
-    String(item.title).trim(),          // B 作品名稱
-    str(item.progress, '0'),            // C 目前進度
-    str(item.totalEp, ''),              // D 總集數
-    str(item.mainType, ''),             // E 類型
-    str(item.country, ''),              // F 國家
-    str(item.status, '未觀看'),          // G 狀態
-    str(item.rating, ''),               // H 評分
-    str(item.platform, ''),             // I 來源平台
-    str(item.watchUrl, ''),             // J 觀看連結
-    str(item.cover, ''),                // K 封面圖
-    str(item.season, ''),               // L 季別
-    str(item.genre, ''),                // M 類別
-    str(item.note, ''),                 // N 備註
-    str(item.addedDate, today)          // O 加入日期
-  ];
+  /*
+   * 依 FIELD_COLUMN 組出整列，長度**一定**等於 COL_COUNT。
+   *
+   * 這裡原本是手寫 15 個值塞進 COL_COUNT 寬的範圍 —— 加欄位之後
+   * setValues 會直接拋「維度不符」，而且是在部署後才炸，本機測不到。
+   * 改成從欄位對照表推導，之後再加欄位也不會漂掉。
+   */
+  var values = [];
+  for (var i = 0; i < COL_COUNT; i++) values.push('');
+
+  values[0] = today;                                    // A 最後更新時間
+  for (var key in FIELD_COLUMN) {
+    if (!Object.prototype.hasOwnProperty.call(FIELD_COLUMN, key)) continue;
+    values[FIELD_COLUMN[key] - 1] = str(item[key], '');
+  }
+
+  // 有預設值的幾欄要蓋回去
+  values[FIELD_COLUMN.title - 1] = String(item.title).trim();
+  values[FIELD_COLUMN.progress - 1] = str(item.progress, '0');
+  values[FIELD_COLUMN.status - 1] = str(item.status, '未觀看');
+  values[FIELD_COLUMN.addedDate - 1] = str(item.addedDate, today);
 
   sheet.getRange(newRow, 1, 1, COL_COUNT).setValues([values]);
   return { success: true, rowNumber: newRow };

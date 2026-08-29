@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Modal from './Modal';
 import { searchWorks } from '@/lib/api';
 import { resolveVideoUrl } from '@/lib/archive';
@@ -12,11 +12,15 @@ import { MAIN_TYPES, NewMediaItem } from '@/types/media';
 import { SearchResult } from '@/types/search';
 
 interface Props {
+  /** 從片庫的搜尋框帶進來的關鍵字，開啟時直接跑一次 */
+  initialQuery?: string;
   /** 直接寫進片庫，回傳實際成功筆數。單筆與批次共用同一條路 */
   onAdd: (items: NewMediaItem[]) => Promise<number>;
   onClose: () => void;
   youtubeKey: string;
   tmdbKey: string;
+  /** 偏好來源，排序用 */
+  preferredSource: string;
 }
 
 /**
@@ -36,12 +40,14 @@ const KINDS = ['電影', '影集', '動漫', '漫畫', '小說'] as const;
  * 結果列上的來源標籤只是讓人知道資料哪來的，不是要他選。
  */
 export default function SearchModal({
+  initialQuery,
   onAdd,
   onClose,
   youtubeKey,
   tmdbKey,
+  preferredSource,
 }: Props) {
-  const [q, setQ] = useState('');
+  const [q, setQ] = useState(initialQuery ?? '');
   const [kind, setKind] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -69,7 +75,7 @@ export default function SearchModal({
     setAdded([]);
     rememberSearch(keyword);
     try {
-      const found = await searchWorks(keyword, kind, { tmdbKey, youtubeKey });
+      const found = await searchWorks(keyword, kind, { tmdbKey, youtubeKey, prefer: preferredSource });
       setResults(found);
     } catch (err) {
       setResults([]);
@@ -79,6 +85,20 @@ export default function SearchModal({
       setSearched(true);
     }
   };
+
+  /**
+   * 從片庫搜尋框帶關鍵字進來時，開啟當下就直接查 —— 使用者已經打完字按過
+   * Enter 了，再叫他按一次搜尋很蠢。只在掛載時跑一次。
+   */
+  useEffect(() => {
+    const keyword = initialQuery?.trim();
+    if (!keyword) return;
+    // 包一層 microtask：run() 一進去就同步 setState，直接在 effect 裡呼叫會撞上
+    // react-hooks/set-state-in-effect（靜態輸出下同步 setState 會造成 hydration
+    // mismatch，這個專案把它設成 error）。推遲一個 tick 就只是普通的非同步更新
+    void Promise.resolve().then(() => run(keyword));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   /**
    * 把一筆搜尋結果補成完整的片庫項目。
@@ -119,6 +139,7 @@ export default function SearchModal({
       mainType: MAIN_TYPES.includes(r.mainType as (typeof MAIN_TYPES)[number]) ? r.mainType : '',
       country: r.country,
       watchUrl,
+      duration: r.duration ?? '',
       note: r.url ? `資料來源：${r.url}` : '',
     };
   };
@@ -193,7 +214,7 @@ export default function SearchModal({
   const allChosen = selectable.length > 0 && selectable.every((r) => chosen.includes(resultKey(r)));
 
   return (
-    <Modal title="搜尋" onClose={onClose}>
+    <Modal title="搜尋" onClose={onClose} panel>
       <div className="space-y-4">
         <form
           className="flex gap-2"

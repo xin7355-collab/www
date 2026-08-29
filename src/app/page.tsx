@@ -18,6 +18,7 @@ import { useAccounts } from '@/hooks/useAccounts';
 import { useLibrary } from '@/hooks/useLibrary';
 import { useSettings } from '@/hooks/useSettings';
 import { useAppearance } from '@/lib/appearance';
+import { applyScheme, isYouTube } from '@/lib/externalApp';
 import { historyKey, indexHistory, recordWatch, useHistory } from '@/lib/history';
 import { BEHIND_TAB, episodesBehind } from '@/lib/schedule';
 import { needsRefresh } from '@/lib/schedule';
@@ -45,7 +46,7 @@ type Dialog =
   | { kind: 'whereToRead'; item: MediaItem }
   | { kind: 'settings' }
   | { kind: 'sites' }
-  | { kind: 'search' };
+  | { kind: 'search'; q?: string };
 
 export default function Home() {
   const accounts = useAccounts();
@@ -58,6 +59,10 @@ export default function Home() {
     saveTmdbKey,
     backgroundAudio,
     saveBackgroundAudio,
+    externalScheme,
+    saveExternalScheme,
+    preferredSource,
+    savePreferredSource,
   } = useSettings();
   const library = useLibrary(accounts.isLoggedIn ? accounts.currentAccount : '');
   const shortcuts = useShortcuts();
@@ -140,6 +145,21 @@ export default function Home() {
   const active: Dialog = dialog.kind === 'none' && shared ? { kind: 'add', prefill: shared } : dialog;
 
   /**
+   * 回到 App 時自動同步一次。
+   *
+   * 這是取代手動「重新整理」鍵的做法：新增本來就是樂觀更新（卡片立刻出現），
+   * 真正需要重抓的情境是「在別台裝置改過、或放著很久」——那正好對應
+   * 「切回這個分頁」。silent 是刻意的，背景同步不該閃一個載入中。
+   */
+  useEffect(() => {
+    const onVisible = () => {
+      if (!document.hidden) reload(true);
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [reload]);
+
+  /**
    * 全站快捷鍵。只在沒有任何 modal 開著時生效 ——
    * 播放器自己也綁了空白鍵與方向鍵，兩邊搶會很難用。
    */
@@ -212,10 +232,28 @@ export default function Home() {
     );
   }
 
+  /**
+   * 交給外部 App 開。設了樣板才會有這條路，見 externalApp.ts。
+   * 一律記一筆觀看紀錄 —— 送出去之後我們就看不到了，至少要知道看過這部。
+   */
+  const openExternally = (item: MediaItem, url: string) => {
+    const target = applyScheme(externalScheme, url);
+    if (!target) return false;
+    recordWatch(item);
+    // 用 assign 而不是指派 location.href —— React Compiler 的 immutability
+    // 規則會把後者當成「改動元件外的變數」而擋下來
+    window.location.assign(target);
+    return true;
+  };
+
   /** 能內嵌的就開站內播放器，其餘（gimy / 一般外站）直接開新分頁 */
   const handlePlay = (item: MediaItem) => {
     const watch = resolveWatch(watchUrlOf(item), item.progress, gimyDomain);
     if (watch.kind === 'none') return;
+
+    // YouTube 交給外部 App —— 網頁播不了背景，那些原生 App 可以
+    if (isYouTube(watch.url) && openExternally(item, watch.url)) return;
+
     if (watch.inApp) {
       setDialog({ kind: 'play', item });
     } else {
@@ -270,23 +308,6 @@ export default function Home() {
 
         <div className="flex shrink-0 items-center gap-1.5">
           <button
-            onClick={() => library.reload()}
-            disabled={library.refreshing}
-            className="h-9 w-9 rounded-lg border border-ink-border-strong text-mist-silver transition hover:border-moon-soft hover:text-moon disabled:opacity-40"
-            aria-label="重新整理"
-            title="重新整理"
-          >
-            {library.refreshing ? '…' : '↻'}
-          </button>
-          <button
-            onClick={() => setDialog({ kind: 'search' })}
-            className="h-9 w-9 rounded-lg border border-ink-border-strong text-mist-silver transition hover:border-moon-soft hover:text-moon"
-            aria-label="搜尋"
-            title="搜尋"
-          >
-            🔍
-          </button>
-          <button
             onClick={addFromClipboard}
             className="h-9 w-9 rounded-lg border border-ink-border-strong text-mist-silver transition hover:border-moon-soft hover:text-moon"
             aria-label="貼上網址新增"
@@ -315,6 +336,7 @@ export default function Home() {
         sortKey={library.sortKey}
         setSortKey={library.setSortKey}
         counts={counts}
+        onSearchOnline={(q) => setDialog({ kind: 'search', q })}
       />
 
       <SiteShortcuts
@@ -353,6 +375,11 @@ export default function Home() {
                   onSetProgress={library.setProgress}
                   onFindName={(it) => setDialog({ kind: 'rename', item: it })}
                   onWhereToRead={(it) => setDialog({ kind: 'whereToRead', item: it })}
+                  onOpenExternal={
+                    externalScheme
+                      ? (it) => openExternally(it, resolveWatch(watchUrlOf(it), it.progress, gimyDomain).url)
+                      : undefined
+                  }
                 />
               </div>
             ))}
@@ -432,6 +459,11 @@ export default function Home() {
                   onSetProgress={library.setProgress}
                   onFindName={(it) => setDialog({ kind: 'rename', item: it })}
                   onWhereToRead={(it) => setDialog({ kind: 'whereToRead', item: it })}
+                  onOpenExternal={
+                    externalScheme
+                      ? (it) => openExternally(it, resolveWatch(watchUrlOf(it), it.progress, gimyDomain).url)
+                      : undefined
+                  }
                   selectMode={picked !== null}
                   selected={picked?.includes(historyKey(item)) ?? false}
                   onToggleSelect={(it) =>
@@ -550,10 +582,12 @@ export default function Home() {
 
       {active.kind === 'search' && (
         <SearchModal
+          initialQuery={active.q}
           onAdd={library.addMany}
           onClose={close}
           youtubeKey={youtubeKey}
           tmdbKey={tmdbKey}
+          preferredSource={preferredSource}
         />
       )}
 
@@ -567,6 +601,10 @@ export default function Home() {
           onSaveTheme={saveTheme}
           backgroundAudio={backgroundAudio}
           onSaveBackgroundAudio={saveBackgroundAudio}
+          externalScheme={externalScheme}
+          onSaveExternalScheme={saveExternalScheme}
+          preferredSource={preferredSource}
+          onSavePreferredSource={savePreferredSource}
           onPatch={library.patchItem}
           onRemove={library.removeItem}
           fontScale={fontScale}
