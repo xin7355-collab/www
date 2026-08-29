@@ -163,9 +163,37 @@ function DirectPlayer({
     // 不需要這場接力。所以只在瀏覽器自己就吃得下這個來源時才準備 <audio>
     if (isHls(url) && !audio.canPlayType('application/vnd.apple.mpegurl')) return;
 
+    /**
+     * 先「解鎖」音訊元素。
+     *
+     * **iOS 不准程式去播一個從來沒在使用者手勢裡播過的媒體元素。**
+     * 而交接是在 visibilitychange 裡發生的 —— 那不是手勢，所以沒先解鎖的話
+     * `audio.play()` 會被直接擋掉，背景就整個沒聲音（這正是第一版的 bug）。
+     *
+     * 所以趁使用者按下播放的當下播一下再立刻暫停：時間停在 0 且只有幾毫秒，
+     * 聽不出來，但元素從此就被 iOS 標記成「使用者允許過」。
+     */
+    let primed = false;
+    const prime = () => {
+      if (primed) return;
+      primed = true;
+      audio.src = url;
+      audio
+        .play()
+        .then(() => {
+          audio.pause();
+          audio.currentTime = 0;
+        })
+        .catch(() => {
+          // 這次沒解鎖成功就下次手勢再試
+          primed = false;
+        });
+    };
+
     const toAudio = () => {
       if (video.paused) return;
-      audio.src = url;
+      // 已經在 prime 時設好 src 了，這裡只要對時間
+      if (audio.src !== url) audio.src = url;
       audio.currentTime = video.currentTime;
       audio.playbackRate = video.playbackRate;
       video.pause();
@@ -183,8 +211,15 @@ function DirectPlayer({
     const onVisibility = () => (document.hidden ? toAudio() : toVideo());
     document.addEventListener('visibilitychange', onVisibility);
 
+    // 兩個時機都試著解鎖：使用者碰畫面的當下一定是手勢；
+    // 而 autoPlay 觸發的 play 有時仍在開啟播放器那一下的手勢範圍內
+    video.addEventListener('play', prime);
+    document.addEventListener('pointerdown', prime, true);
+
     return () => {
       document.removeEventListener('visibilitychange', onVisibility);
+      video.removeEventListener('play', prime);
+      document.removeEventListener('pointerdown', prime, true);
       audio.pause();
       audio.removeAttribute('src');
     };
