@@ -14,6 +14,8 @@ interface Props {
   watch: ResolvedWatch;
   onClose: () => void;
   onBump: (item: MediaItem, delta: number) => void;
+  /** 切到背景時要不要繼續放聲音（只對直鏈有效） */
+  backgroundAudio: boolean;
 }
 
 const SPEEDS = [0.75, 1, 1.25, 1.5, 2];
@@ -51,6 +53,7 @@ interface DirectPlayerProps {
   /** 片頭片尾標記，整部作品共用 */
   marks: SkipMarks;
   onMarksChange: (marks: SkipMarks) => void;
+  backgroundAudio: boolean;
 }
 
 /**
@@ -69,8 +72,20 @@ function DirectPlayer({
   onProgress,
   marks,
   onMarksChange,
+  backgroundAudio,
 }: DirectPlayerProps) {
   const ref = useRef<HTMLVideoElement>(null);
+  /** 背景接手用的 <audio>，見下面「背景播放」那段 */
+  const audioRef = useRef<HTMLAudioElement>(null);
+
+  /**
+   * 目前真正在出聲的那個元素。切到背景之後是 <audio>，其餘時候是 <video>。
+   * 存進度、鎖定畫面控制、播完 +1 都要認這個，不然一進背景就全部停擺。
+   */
+  const activeEl = (): HTMLMediaElement => {
+    const audio = audioRef.current;
+    return audio && !audio.paused ? audio : (ref.current as HTMLMediaElement);
+  };
 
   const [speed, setSpeed] = useState(1);
   const [pipAvailable, setPipAvailable] = useState(false);
@@ -125,6 +140,56 @@ function DirectPlayer({
     };
   }, [url]);
 
+  /**
+   * 背景播放：頁面切到背景時，把聲音交給 <audio> 接手。
+   *
+   * 為什麼要這樣繞：**iOS 會在螢幕鎖定或切走 app 時暫停 `<video>`**，
+   * 這是 WebKit 的規則，Media Session 也救不了。但同一個來源餵給 `<audio>`
+   * 就允許在背景繼續播 —— 所以進背景時暫停影片、用音訊接著播同一個時間點，
+   * 回到前景再換回來。使用者只會聽到聲音沒斷。
+   *
+   * Android 本來就能在背景播（有 Media Session 就夠），這段對它是多餘的，
+   * 但交接成本只有一次 seek，換到「兩邊行為一致」很划算。
+   *
+   * **內嵌 iframe（YouTube / BiliBili）完全做不到** —— 那是對方頁面裡的
+   * 播放器，我們碰不到它的 media 元素。這個功能只對直鏈有效。
+   */
+  useEffect(() => {
+    const video = ref.current;
+    const audio = audioRef.current;
+    if (!video || !audio || !backgroundAudio) return;
+
+    // HLS 在非 Safari 要靠 hls.js 才播得動，而那些瀏覽器本來就能在背景播音訊，
+    // 不需要這場接力。所以只在瀏覽器自己就吃得下這個來源時才準備 <audio>
+    if (isHls(url) && !audio.canPlayType('application/vnd.apple.mpegurl')) return;
+
+    const toAudio = () => {
+      if (video.paused) return;
+      audio.src = url;
+      audio.currentTime = video.currentTime;
+      audio.playbackRate = video.playbackRate;
+      video.pause();
+      // 背景啟動被瀏覽器擋下也不要讓它炸掉 —— 回到前景照樣接得回去
+      void audio.play().catch(() => {});
+    };
+
+    const toVideo = () => {
+      if (audio.paused) return;
+      video.currentTime = audio.currentTime;
+      audio.pause();
+      void video.play().catch(() => {});
+    };
+
+    const onVisibility = () => (document.hidden ? toAudio() : toVideo());
+    document.addEventListener('visibilitychange', onVisibility);
+
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      audio.pause();
+      audio.removeAttribute('src');
+    };
+  }, [url, backgroundAudio]);
+
   // ── 續播、進度保存、播完 +1、螢幕不休眠、鍵盤操作
   useEffect(() => {
     const el = ref.current;
@@ -134,8 +199,10 @@ function DirectPlayer({
     setPipAvailable(document.pictureInPictureEnabled);
 
     const persist = () => {
-      savePosition(url, el.currentTime);
-      progressRef.current(el.currentTime, Number.isFinite(el.duration) ? el.duration : 0);
+      // 背景時真正在跑的是 <audio>，讀 video 會停在交接當下那一秒
+      const media = activeEl();
+      savePosition(url, media.currentTime);
+      progressRef.current(media.currentTime, Number.isFinite(media.duration) ? media.duration : 0);
     };
     const timer = window.setInterval(persist, 5000);
 
@@ -158,6 +225,9 @@ function DirectPlayer({
       endedRef.current();
     };
     el.addEventListener('ended', handleEnded);
+    // 在背景播完的那一集也要 +1
+    const audio = audioRef.current;
+    audio?.addEventListener('ended', handleEnded);
 
     let lock: { release: () => Promise<void> } | null = null;
     const acquire = () => {
@@ -219,6 +289,7 @@ function DirectPlayer({
       persist();
       el.removeEventListener('timeupdate', tick);
       el.removeEventListener('ended', handleEnded);
+      audio?.removeEventListener('ended', handleEnded);
       el.removeEventListener('play', acquire);
       el.removeEventListener('pause', release);
       window.removeEventListener('keydown', onKey);
@@ -249,12 +320,14 @@ function DirectPlayer({
       });
     }
 
+    // 一律操作「目前在出聲的那個元素」—— 背景時是 <audio>，
+    // 寫死 video 的話鎖定畫面上的按鈕在背景會按了沒反應
     const handlers: [MediaSessionAction, MediaSessionActionHandler][] = [
-      ['play', () => void el.play()],
-      ['pause', () => el.pause()],
-      ['seekbackward', (d) => { el.currentTime -= d.seekOffset || SEEK_STEP; }],
-      ['seekforward', (d) => { el.currentTime += d.seekOffset || SEEK_STEP; }],
-      ['seekto', (d) => { if (typeof d.seekTime === 'number') el.currentTime = d.seekTime; }],
+      ['play', () => void activeEl().play()],
+      ['pause', () => activeEl().pause()],
+      ['seekbackward', (d) => { activeEl().currentTime -= d.seekOffset || SEEK_STEP; }],
+      ['seekforward', (d) => { activeEl().currentTime += d.seekOffset || SEEK_STEP; }],
+      ['seekto', (d) => { const m = activeEl(); if (typeof d.seekTime === 'number') m.currentTime = d.seekTime; }],
     ];
     for (const [action, fn] of handlers) {
       // 舊瀏覽器不認得部分 action，setActionHandler 會直接丟例外
@@ -267,12 +340,13 @@ function DirectPlayer({
 
     // 讓鎖定畫面的進度條跟得上
     const syncPosition = () => {
-      if (!Number.isFinite(el.duration) || el.duration <= 0) return;
+      const m = activeEl();
+      if (!Number.isFinite(m.duration) || m.duration <= 0) return;
       try {
         ms.setPositionState({
-          duration: el.duration,
-          position: Math.min(el.currentTime, el.duration),
-          playbackRate: el.playbackRate,
+          duration: m.duration,
+          position: Math.min(m.currentTime, m.duration),
+          playbackRate: m.playbackRate,
         });
       } catch {
         // Safari 舊版沒有 setPositionState
@@ -346,6 +420,12 @@ function DirectPlayer({
           playsInline
           className="aspect-video w-full rounded-lg bg-black"
         />
+
+        {/*
+          背景接手用的音訊元素。平常不出聲也不占位置，只有頁面切到背景時
+          才接過同一個來源繼續播 —— iOS 不讓 <video> 在背景播，但 <audio> 可以。
+        */}
+        <audio ref={audioRef} preload="none" className="hidden" />
 
         {/* 浮在原生控制列上方，避免蓋住進度條 */}
         {(inOpening || inEnding) && (
@@ -430,7 +510,7 @@ function DirectPlayer({
   );
 }
 
-export default function PlayerModal({ item, watch, onClose, onBump }: Props) {
+export default function PlayerModal({ item, watch, onClose, onBump, backgroundAudio }: Props) {
   const done = Number.parseInt(item.progress.replace(/[^\d]/g, ''), 10) || 0;
   const key = itemKey(item);
   const marks = marksFor(useSkipMarks(), key);
@@ -481,6 +561,7 @@ export default function PlayerModal({ item, watch, onClose, onBump }: Props) {
           }
           marks={marks}
           onMarksChange={(next) => saveMarks(key, next)}
+          backgroundAudio={backgroundAudio}
         />
       ) : (
         <iframe

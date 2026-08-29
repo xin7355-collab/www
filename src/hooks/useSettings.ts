@@ -7,6 +7,7 @@ import { DEFAULT_GIMY_DOMAIN } from '@/lib/watchUrl';
 const KEY = 'myStream.gimyDomain';
 const YT_KEY = 'myStream.youtubeKey';
 const TMDB_KEY = 'myStream.tmdbKey';
+const BG_AUDIO_KEY = 'myStream.backgroundAudio';
 
 /**
  * gimy 之類會換網域的站點，網域是全域設定。
@@ -37,7 +38,26 @@ export function useSettings() {
     setStored(TMDB_KEY, value.trim());
   }, []);
 
-  return { gimyDomain, saveGimyDomain, youtubeKey, saveYoutubeKey, tmdbKey, saveTmdbKey };
+  /**
+   * 背景播放。預設開啟 —— 想關掉的情境很少，但關掉的人會很想關掉
+   * （例如只想看畫面、不想手機在口袋裡繼續出聲）。
+   */
+  const backgroundAudio = useStored(BG_AUDIO_KEY, '1') !== '0';
+
+  const saveBackgroundAudio = useCallback((on: boolean) => {
+    setStored(BG_AUDIO_KEY, on ? '1' : '0');
+  }, []);
+
+  return {
+    gimyDomain,
+    saveGimyDomain,
+    youtubeKey,
+    saveYoutubeKey,
+    tmdbKey,
+    saveTmdbKey,
+    backgroundAudio,
+    saveBackgroundAudio,
+  };
 }
 
 // ─── 播放進度（直鏈影片用）────────────────────────────────────

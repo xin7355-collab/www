@@ -13,6 +13,8 @@ import { MAIN_TYPES, MediaItem, MediaPatch, NewMediaItem } from '@/types/media';
 interface Props {
   theme: string;
   onSaveTheme: (value: string) => void;
+  backgroundAudio: boolean;
+  onSaveBackgroundAudio: (on: boolean) => void;
   /** 就地改一筆（片庫轉繁體用） */
   onPatch: (row: number, fields: MediaPatch) => Promise<void>;
   /** 刪掉一列（清理重複用） */
@@ -37,6 +39,8 @@ interface Props {
 export default function SettingsModal({
   theme,
   onSaveTheme,
+  backgroundAudio,
+  onSaveBackgroundAudio,
   onPatch,
   onRemove,
   fontScale,
@@ -389,6 +393,25 @@ export default function SettingsModal({
             className="w-full rounded-lg border border-ink-border-strong py-2 text-xs text-mist-silver transition hover:border-moon-soft hover:text-moon"
           >
             {copied ? '已複製 —— 貼進新書籤的網址欄即可' : '複製書籤小工具程式碼'}
+          </button>
+        </section>
+
+        <section className="border-t border-ink-border pt-5">
+          <h3 className="mb-1 text-sm text-mist">背景播放</h3>
+          <p className="mb-2.5 text-[11px] leading-relaxed text-mist-shadow">
+            關掉螢幕或切到別的 app 時聲音繼續播。
+            <span className="text-mist-silver">只對影片直鏈有效</span> ——
+            YouTube、BiliBili 那種內嵌播放器是對方的頁面，我們控制不了。
+          </p>
+          <button
+            onClick={() => onSaveBackgroundAudio(!backgroundAudio)}
+            className={`w-full rounded-lg border py-2 text-xs transition ${
+              backgroundAudio
+                ? 'border-moon-soft bg-moon/10 text-moon'
+                : 'border-ink-border-strong text-mist-silver hover:border-moon-soft'
+            }`}
+          >
+            {backgroundAudio ? '已開啟 —— 點一下關閉' : '已關閉 —— 點一下開啟'}
           </button>
         </section>
 

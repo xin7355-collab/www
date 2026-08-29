@@ -49,8 +49,16 @@ type Dialog =
 
 export default function Home() {
   const accounts = useAccounts();
-  const { gimyDomain, saveGimyDomain, youtubeKey, saveYoutubeKey, tmdbKey, saveTmdbKey } =
-    useSettings();
+  const {
+    gimyDomain,
+    saveGimyDomain,
+    youtubeKey,
+    saveYoutubeKey,
+    tmdbKey,
+    saveTmdbKey,
+    backgroundAudio,
+    saveBackgroundAudio,
+  } = useSettings();
   const library = useLibrary(accounts.isLoggedIn ? accounts.currentAccount : '');
   const shortcuts = useShortcuts();
   const shared = useSharedInput();
@@ -486,6 +494,7 @@ export default function Home() {
               item={live}
               watch={resolveWatch(watchUrlOf(live), live.progress, gimyDomain)}
               onBump={library.bumpProgress}
+              backgroundAudio={backgroundAudio}
               onClose={close}
             />
           );
@@ -556,6 +565,8 @@ export default function Home() {
         <SettingsModal
           theme={theme}
           onSaveTheme={saveTheme}
+          backgroundAudio={backgroundAudio}
+          onSaveBackgroundAudio={saveBackgroundAudio}
           onPatch={library.patchItem}
           onRemove={library.removeItem}
           fontScale={fontScale}
