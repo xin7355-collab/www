@@ -358,21 +358,6 @@ export default function ItemForm({
               ))}
             </select>
           </div>
-          <div>
-            <Label>評分</Label>
-            <select
-              className="field"
-              value={form.rating}
-              onChange={(e) => set('rating', e.target.value)}
-            >
-              <option value="">未評分</option>
-              {[5, 4, 3, 2, 1].map((n) => (
-                <option key={n} value={String(n)}>
-                  {'★'.repeat(n)}
-                </option>
-              ))}
-            </select>
-          </div>
         </div>
 
         <div>

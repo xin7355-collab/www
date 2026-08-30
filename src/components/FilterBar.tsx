@@ -17,7 +17,6 @@ const SORT_LABEL: Record<SortKey, string> = {
   updated: '最近更新',
   added: '加入日期',
   title: '名稱',
-  rating: '評分',
 };
 
 export default function FilterBar({

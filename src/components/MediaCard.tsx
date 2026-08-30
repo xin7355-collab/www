@@ -22,6 +22,12 @@ interface Props {
   onWhereToRead: (item: MediaItem) => void;
   /** 設了外部 App 樣板才有：手動把這部丟給那個 App 開 */
   onOpenExternal?: (item: MediaItem) => void;
+  /** 這部底下有幾集；0 代表它自己就是單一影片 */
+  episodeCount: number;
+  /** 打開分集清單 */
+  onOpenEpisodes: (item: MediaItem) => void;
+  /** 貼播放清單網址補齊這部的集數 */
+  onFillEpisodes: (item: MediaItem) => void;
   /** 批次選取模式：點封面變成勾選而不是開播 */
   selectMode?: boolean;
   selected?: boolean;
@@ -54,6 +60,9 @@ export default function MediaCard({
   onFindName,
   onWhereToRead,
   onOpenExternal,
+  episodeCount,
+  onOpenEpisodes,
+  onFillEpisodes,
   selectMode = false,
   selected = false,
   onToggleSelect,
@@ -108,8 +117,13 @@ export default function MediaCard({
     >
       {/* 整張卡就是開播鍵 —— 這是最常做的事，不該藏在一顆小按鈕裡 */}
       <button
-        onClick={() => (selectMode ? onToggleSelect?.(item) : playable && onPlay(item))}
-        disabled={pending || (!selectMode && !playable)}
+        onClick={() => {
+          if (selectMode) return onToggleSelect?.(item);
+          // 有分集的作品，點下去是看有哪幾集，而不是直接播某一集
+          if (episodeCount > 0) return onOpenEpisodes(item);
+          if (playable) onPlay(item);
+        }}
+        disabled={pending || (!selectMode && episodeCount === 0 && !playable)}
         className="absolute inset-0 block h-full w-full overflow-hidden bg-ink-mist disabled:cursor-default"
         title={selectMode ? '點一下選取' : watch.hint || '尚未設定觀看連結'}
         aria-label={selectMode ? `選取 ${item.title}` : playable ? `播放 ${item.title}` : item.title}
@@ -213,7 +227,12 @@ export default function MediaCard({
             落後 {behind}
           </span>
         )}
-        {!playable && (
+        {episodeCount > 0 && (
+          <span className="rounded bg-star/90 px-1.5 py-0.5 text-[10px] font-medium text-ink-black">
+            {episodeCount} 集
+          </span>
+        )}
+        {!playable && episodeCount === 0 && (
           <span className="rounded bg-ink-black/80 px-1.5 py-0.5 text-[10px] text-mist-shadow">
             無連結
           </span>
@@ -254,6 +273,13 @@ export default function MediaCard({
           <div className="absolute right-1.5 top-9 z-30 w-32 overflow-hidden rounded-lg border border-ink-border-strong bg-ink-deep shadow-lg">
             {[
               { label: '編輯', run: () => onEdit(item), danger: false, show: true },
+              // 分集只掛在作品上；本身已經是某部的一集就不再往下長一層
+              {
+                label: episodeCount > 0 ? '補更多集數' : '補齊集數',
+                run: () => onFillEpisodes(item),
+                danger: false,
+                show: !item.parent,
+              },
               { label: '查中文名', run: () => onFindName(item), danger: false, show: true },
               // 只有小說漫畫需要 —— 影劇的連結本來就是能播的那一個
               {

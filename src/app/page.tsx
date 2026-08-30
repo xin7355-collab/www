@@ -9,6 +9,9 @@ import LoginScreen from '@/components/LoginScreen';
 import MediaCard from '@/components/MediaCard';
 import PlayerModal from '@/components/PlayerModal';
 import SearchModal from '@/components/SearchModal';
+import EpisodesModal from '@/components/EpisodesModal';
+import FillEpisodesModal from '@/components/FillEpisodesModal';
+import MergeModal from '@/components/MergeModal';
 import ReadingLinksModal from '@/components/ReadingLinksModal';
 import RenameModal from '@/components/RenameModal';
 import SettingsModal from '@/components/SettingsModal';
@@ -44,6 +47,9 @@ type Dialog =
   | { kind: 'rename'; item: MediaItem }
   | { kind: 'bulkDelete'; keys: string[] }
   | { kind: 'whereToRead'; item: MediaItem }
+  | { kind: 'episodes'; item: MediaItem }
+  | { kind: 'fillEpisodes'; item: MediaItem }
+  | { kind: 'merge'; keys: string[] }
   | { kind: 'settings' }
   | { kind: 'sites' }
   | { kind: 'search'; q?: string };
@@ -411,6 +417,9 @@ export default function Home() {
                   onFindName={(it) => setDialog({ kind: 'rename', item: it })}
                   onWhereToRead={(it) => setDialog({ kind: 'whereToRead', item: it })}
                   onOpenExternal={openInApp}
+                  episodeCount={library.episodesOf(item.title).length}
+                  onOpenEpisodes={(it) => setDialog({ kind: 'episodes', item: it })}
+                  onFillEpisodes={(it) => setDialog({ kind: 'fillEpisodes', item: it })}
                 />
               </div>
             ))}
@@ -467,6 +476,13 @@ export default function Home() {
                     結束選取
                   </button>
                   <button
+                    onClick={() => setDialog({ kind: 'merge', keys: picked })}
+                    disabled={picked.length < 2}
+                    className="rounded-full border border-star-soft/60 px-2.5 py-1 text-[11px] text-star transition hover:bg-star/10 disabled:opacity-40"
+                  >
+                    合併
+                  </button>
+                  <button
                     onClick={() => setDialog({ kind: 'bulkDelete', keys: picked })}
                     disabled={picked.length === 0}
                     className="rounded-full border border-cinnabar/50 px-2.5 py-1 text-[11px] text-cinnabar transition hover:bg-cinnabar/10 disabled:opacity-40"
@@ -491,6 +507,9 @@ export default function Home() {
                   onFindName={(it) => setDialog({ kind: 'rename', item: it })}
                   onWhereToRead={(it) => setDialog({ kind: 'whereToRead', item: it })}
                   onOpenExternal={openInApp}
+                  episodeCount={library.episodesOf(item.title).length}
+                  onOpenEpisodes={(it) => setDialog({ kind: 'episodes', item: it })}
+                  onFillEpisodes={(it) => setDialog({ kind: 'fillEpisodes', item: it })}
                   selectMode={picked !== null}
                   selected={picked?.includes(historyKey(item)) ?? false}
                   onToggleSelect={(it) =>
@@ -583,6 +602,42 @@ export default function Home() {
         />
       )}
 
+      {active.kind === 'episodes' && (
+        <EpisodesModal
+          work={active.item}
+          episodes={library.episodesOf(active.item.title)}
+          gimyDomain={gimyDomain}
+          onPlay={handlePlay}
+          onEdit={(it) => setDialog({ kind: 'edit', item: it })}
+          onClose={close}
+        />
+      )}
+
+      {active.kind === 'fillEpisodes' && (
+        <FillEpisodesModal
+          work={active.item}
+          youtubeKey={youtubeKey}
+          existing={library.episodesOf(active.item.title)}
+          onAdd={library.addMany}
+          onOpenSettings={() => setDialog({ kind: 'settings' })}
+          onClose={close}
+        />
+      )}
+
+      {active.kind === 'merge' && (
+        <MergeModal
+          candidates={library.visible.filter((it) => active.keys.includes(historyKey(it)))}
+          onMerge={(parentTitle, children) => {
+            for (const child of children) {
+              void library.patchItem(child.rowNumber, { parent: parentTitle });
+            }
+            setPicked(null);
+            close();
+          }}
+          onClose={close}
+        />
+      )}
+
       {active.kind === 'whereToRead' && (
         <ReadingLinksModal
           item={active.item}
@@ -600,6 +655,11 @@ export default function Home() {
           tmdbKey={tmdbKey}
           onRename={(title) => {
             if (title && title !== active.item.title) {
+              // 分集是用「作品名稱」連過去的，改名要順手把底下的一起帶走，
+              // 否則那些集數會斷鏈變成一堆獨立卡片
+              for (const ep of library.episodesOf(active.item.title)) {
+                void library.patchItem(ep.rowNumber, { parent: title });
+              }
               void library.patchItem(active.item.rowNumber, { title });
             }
             close();

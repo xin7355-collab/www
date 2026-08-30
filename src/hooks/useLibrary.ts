@@ -294,7 +294,24 @@ export function useLibrary(account: string) {
   // ─── 衍生資料 ───────────────────────────────────────────────
 
   const keyword = search.trim().toLowerCase();
+
+  /**
+   * 分集歸到作品底下。
+   *
+   * 網格只顯示「一部作品」，分集藏在作品裡面 —— 否則匯入一份 279 集的
+   * 播放清單，片庫就會變成 279 張卡片。
+   *
+   * **找不到父作品的分集當成獨立作品顯示**：父項被刪掉時，那些集數
+   * 不該就此從畫面上消失、只剩試算表裡看得到。
+   */
+  const titles = new Set(items.map((it) => it.title));
+  const isEpisode = (it: MediaItem) => Boolean(it.parent) && titles.has(it.parent);
+
+  /** 某部作品底下的分集，照加入順序 */
+  const episodesOf = (title: string) => items.filter((it) => it.parent === title);
+
   const visible = items
+    .filter((it) => !isEpisode(it))
     // 「待追」不是分類而是狀態：已經播了但我還沒追上的
     .filter((it) =>
       tab === '全部' ? true : tab === BEHIND_TAB ? episodesBehind(it) > 0 : it.mainType === tab,
@@ -311,8 +328,6 @@ export function useLibrary(account: string) {
       switch (sortKey) {
         case 'title':
           return a.title.localeCompare(b.title, 'zh-Hant');
-        case 'rating':
-          return (Number(b.rating) || 0) - (Number(a.rating) || 0);
         case 'added':
           return b.addedDate.localeCompare(a.addedDate);
         default:
@@ -329,6 +344,7 @@ export function useLibrary(account: string) {
   return {
     items,
     visible,
+    episodesOf,
     stats,
     loading,
     refreshing,

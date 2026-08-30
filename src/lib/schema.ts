@@ -25,6 +25,7 @@ export const COLUMN_ORDER = [
   'nextAirDate',
   'nextEpLabel',
   'duration',
+  'parent',
 ] as const satisfies readonly (keyof MediaItem)[];
 
 /**

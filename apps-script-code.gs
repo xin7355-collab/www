@@ -34,7 +34,8 @@ var HEADERS = [
   '已播集數',     // Q 17  airedEp     到今天為止已播出幾集
   '下一集日期',   // R 18  nextAirDate YYYY-MM-DD
   '下一集集數',   // S 19  nextEpLabel 例：第 188 集（S8E12）
-  '片長'          // T 20  duration    例：23:11。加在最後才不會位移既有資料
+  '片長',         // T 20  duration    例：23:11
+  '所屬作品'      // U 21  parent      空白＝它自己就是一部作品；填了＝它是那部的其中一集
 ];
 
 var COL_COUNT = HEADERS.length;
@@ -59,7 +60,8 @@ var FIELD_COLUMN = {
   airedEp: 17,
   nextAirDate: 18,
   nextEpLabel: 19,
-  duration: 20
+  duration: 20,
+  parent: 21
 };
 
 // ─── 路由 ─────────────────────────────────────────────────────
