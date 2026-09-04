@@ -4,12 +4,15 @@ import { useState } from 'react';
 import Modal from './Modal';
 import { installDailyTrigger, maskedUrl, probe, Probe, refreshSchedulesNow } from '@/lib/api';
 import { FONT_SCALES, THEMES } from '@/lib/appearance';
-import { PLACEHOLDERS } from '@/lib/externalApp';
+import { applyScheme, PLACEHOLDERS } from '@/lib/externalApp';
 import { loadConverter } from '@/lib/s2t';
 import { downloadBackup, downloadCsv, findDuplicates, parseBackup } from '@/lib/backup';
 import { addShortcut, removeShortcut, SiteShortcut } from '@/lib/shortcuts';
 import { DEFAULT_GIMY_DOMAIN } from '@/lib/watchUrl';
 import { MAIN_TYPES, MediaItem, MediaPatch, NewMediaItem } from '@/types/media';
+
+/** 預覽用的樣本網址 */
+const SAMPLE_URL = 'https://www.youtube.com/watch?v=abc123';
 
 interface Props {
   theme: string;
@@ -460,9 +463,9 @@ export default function SettingsModal({
         <section className="border-t border-ink-border pt-5">
           <h3 className="mb-1 text-sm text-mist">用外部 App 開 YouTube</h3>
           <p className="mb-2.5 text-[11px] leading-relaxed text-mist-shadow">
-            填了之後 YouTube 連結會交給你指定的 App 開（Tube Browser、Brave…）。
-            <span className="text-mist-silver">網頁做不到 YouTube 背景播，那些原生 App 可以。</span>
-            留空就照原本的方式站內播。
+            填了之後，卡片的 ⋯ 與播放器底部會多一個「用外部 App 開」。
+            <span className="text-mist-silver">點卡片仍然照原本的方式站內播</span> ——
+            要送出去是你按了才送，不會自動轉走。
           </p>
           <div className="flex gap-2">
             <input
@@ -478,6 +481,30 @@ export default function SettingsModal({
               儲存
             </button>
           </div>
+          {/*
+            即時預覽。少了它，使用者要等到真的點下去、Safari 跳「網址無效」
+            才知道樣板打錯了 —— 而那時候已經沒有退路。
+          */}
+          {scheme.trim() && (
+            <div className="mt-2 rounded-lg border border-ink-border bg-ink-black/40 p-2">
+              <p className="mb-1 text-[10px] text-mist-shadow">點下去會開啟：</p>
+              <p className="font-num break-all text-[10px] leading-relaxed text-mist-silver">
+                {applyScheme(scheme, SAMPLE_URL) || '（樣板無效）'}
+              </p>
+              {!/^[a-z][a-z0-9+.-]*:/i.test(scheme.trim()) && (
+                <p className="mt-1 text-[10px] leading-relaxed text-cinnabar">
+                  開頭看起來不是一個 App scheme（要像 <span className="font-num">xxx://</span>）。
+                  這樣 Safari 會說「網址無效」。
+                </p>
+              )}
+              {!/\{(url|rawurl|nohttps)\}/.test(scheme) && (
+                <p className="mt-1 text-[10px] leading-relaxed text-cinnabar">
+                  樣板裡沒有任何替換符，這樣每次都會開到同一個地方。
+                </p>
+              )}
+            </div>
+          )}
+
           <ul className="mt-2 space-y-0.5 text-[10px] leading-relaxed text-mist-shadow">
             {PLACEHOLDERS.map((p) => (
               <li key={p.token}>

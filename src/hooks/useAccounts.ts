@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import * as api from '@/lib/api';
-import { clearStored, setStored, useStored } from '@/lib/localStore';
+import { clearStored, setStored, useStored, readStored } from '@/lib/localStore';
 
 const LAST_ACCOUNT = 'myStream.lastAccount';
 
@@ -32,7 +32,7 @@ export function useAccounts() {
     let cancelled = false;
 
     async function init() {
-      const hadAccount = Boolean(localStorage.getItem(LAST_ACCOUNT));
+      const hadAccount = Boolean(readStored(LAST_ACCOUNT));
       try {
         if (!api.isConfigured()) {
           throw new api.ApiError(

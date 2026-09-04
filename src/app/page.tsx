@@ -21,7 +21,7 @@ import { useAccounts } from '@/hooks/useAccounts';
 import { useLibrary } from '@/hooks/useLibrary';
 import { useSettings } from '@/hooks/useSettings';
 import { useAppearance } from '@/lib/appearance';
-import { applyScheme, isYouTube } from '@/lib/externalApp';
+import { applyScheme } from '@/lib/externalApp';
 import { historyKey, indexHistory, recordWatch, useHistory } from '@/lib/history';
 import { BEHIND_TAB, episodesBehind } from '@/lib/schedule';
 import { needsRefresh } from '@/lib/schedule';
@@ -270,9 +270,6 @@ export default function Home() {
   const handlePlay = (item: MediaItem) => {
     const watch = resolveWatch(watchUrlOf(item), item.progress, gimyDomain);
     if (watch.kind === 'none') return;
-
-    // YouTube 交給外部 App —— 網頁播不了背景，那些原生 App 可以
-    if (isYouTube(watch.url) && openExternally(item, watch.url)) return;
 
     if (watch.inApp) {
       setDialog({ kind: 'play', item });

@@ -1,7 +1,7 @@
 'use client';
 
 import { itemKey } from './itemKey';
-import { setStored, useStored } from './localStore';
+import { setStored, useStored, readStored } from './localStore';
 
 /**
  * 片頭／片尾標記 —— 追番時每一集都要手動拉過 OP 很煩，標一次就一勞永逸。
@@ -48,7 +48,7 @@ export function marksFor(store: Store, key: string): SkipMarks {
 }
 
 export function saveMarks(key: string, marks: SkipMarks) {
-  const store = parse(localStorage.getItem(KEY) ?? '{}');
+  const store = parse(readStored(KEY) ?? '{}');
 
   // 三個值都回到預設就把整筆刪掉，不要在 localStorage 裡留空殼
   if (marks.opEnd <= 0 && marks.edStart <= 0 && !marks.auto) {

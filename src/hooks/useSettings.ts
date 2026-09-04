@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback } from 'react';
-import { setStored, useStored } from '@/lib/localStore';
+import { readStored, removeStored, setStored, useStored, writeStored } from '@/lib/localStore';
 import { DEFAULT_GIMY_DOMAIN } from '@/lib/watchUrl';
 
 const KEY = 'myStream.gimyDomain';
@@ -91,12 +91,16 @@ export function useSettings() {
 
 const posKey = (url: string) => `myStream.pos.${url}`;
 
+/**
+ * loadPosition 是在 useState 的 lazy initializer 裡呼叫的 —— 那是 render 期間，
+ * 在那裡丟例外會讓播放器整個白掉，所以一定要走 readStored。
+ */
 export function loadPosition(url: string): number {
-  const v = Number(localStorage.getItem(posKey(url)));
+  const v = Number(readStored(posKey(url)));
   return Number.isFinite(v) && v > 0 ? v : 0;
 }
 
 export function savePosition(url: string, seconds: number) {
-  if (seconds > 5) localStorage.setItem(posKey(url), String(Math.floor(seconds)));
-  else localStorage.removeItem(posKey(url));
+  if (seconds > 5) writeStored(posKey(url), String(Math.floor(seconds)));
+  else removeStored(posKey(url));
 }

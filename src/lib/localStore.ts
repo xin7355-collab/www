@@ -26,20 +26,63 @@ function subscribe(onChange: () => void) {
   };
 }
 
+/**
+ * 存取 localStorage 一律包 try/catch。
+ *
+ * **不是防禦性程式碼，是真的會丟例外**：Safari 無痕模式、使用者把
+ * 「阻擋所有 Cookie」打開、或頁面被放進 sandbox 的 iframe 裡，
+ * `localStorage` 這個屬性本身讀取就會 throw。
+ *
+ * 而 getSnapshot 是 React 在 render 期間呼叫的 —— 在那裡丟例外會讓
+ * 整個 App 變成白畫面，而不是「這個設定讀不到」而已。
+ */
+export function readStored(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
 export function useStored(key: string, fallback: string): string {
   return useSyncExternalStore(
     subscribe,
-    () => localStorage.getItem(key) || fallback,
+    () => readStored(key) || fallback,
     () => fallback,
   );
 }
 
 export function setStored(key: string, value: string) {
-  localStorage.setItem(key, value);
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    // 寫不進去就只在這次工作階段生效，總比整個當掉好
+  }
   emit();
 }
 
+/** 直接寫入，不通知訂閱者 —— 給 pos.{url} 這種沒有元件在看的鍵用 */
+export function writeStored(key: string, value: string) {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    // 同上
+  }
+}
+
+export function removeStored(key: string) {
+  try {
+    localStorage.removeItem(key);
+  } catch {
+    // 同上
+  }
+}
+
 export function clearStored(key: string) {
-  localStorage.removeItem(key);
+  try {
+    localStorage.removeItem(key);
+  } catch {
+    // 同上
+  }
   emit();
 }

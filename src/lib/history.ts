@@ -1,7 +1,7 @@
 'use client';
 
 import { itemKey } from './itemKey';
-import { setStored, useStored } from './localStore';
+import { readStored, setStored, useStored } from './localStore';
 import { MediaItem } from '@/types/media';
 
 /**
@@ -53,7 +53,7 @@ export function useHistory(): HistoryEntry[] {
 
 /** 讀目前的紀錄（非 hook 場合用，例如事件處理器裡） */
 function read(): HistoryEntry[] {
-  return parse(localStorage.getItem(KEY) ?? '[]');
+  return parse(readStored(KEY) ?? '[]');
 }
 
 /**

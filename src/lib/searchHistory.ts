@@ -1,6 +1,6 @@
 'use client';
 
-import { setStored, useStored } from './localStore';
+import { readStored, setStored, useStored } from './localStore';
 
 /**
  * 搜尋關鍵字紀錄。
@@ -34,12 +34,12 @@ export function rememberSearch(keyword: string) {
   const word = keyword.trim();
   if (!word) return;
 
-  const rest = parse(localStorage.getItem(KEY) ?? '[]').filter((x) => x !== word);
+  const rest = parse(readStored(KEY) ?? '[]').filter((x) => x !== word);
   setStored(KEY, JSON.stringify([word, ...rest].slice(0, LIMIT)));
 }
 
 export function forgetSearch(keyword: string) {
-  const rest = parse(localStorage.getItem(KEY) ?? '[]').filter((x) => x !== keyword);
+  const rest = parse(readStored(KEY) ?? '[]').filter((x) => x !== keyword);
   setStored(KEY, JSON.stringify(rest));
 }
 
